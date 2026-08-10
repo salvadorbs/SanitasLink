@@ -12,12 +12,13 @@ You are an expert Frontend Developer specializing in React, TypeScript, and mode
 
 ## 🔄 API Integration & Type Generation (Orval + Axios)
 
-- **Source of Truth:** The backend OpenAPI 3 / Swagger spec (`http://localhost:8080/v3/api-docs` or `/docs/openapi.json`) is the single source of truth for all API contracts.
+- **Source of Truth:** The backend OpenAPI 3 / Swagger spec (`http://localhost:8080/v3/api-docs`) is the single source of truth for all API contracts.
 - **Client & Hook Generation:** Do NOT write manual API fetchers or TanStack Query hooks. Use **Orval** to automatically generate:
   - TypeScript interfaces/DTOs from OpenAPI schemas.
   - Custom **Axios** instance calls with automatic request/response interceptors (handling Auth JWT headers and error mapping).
   - Fully-typed **TanStack Query (React Query)** hooks (`useQuery`, `useMutation`).
 - **Generation Command:** Run `npm run generate:api` whenever backend endpoints or DTOs change.
+- **Auth & Tenancy:** Only the `Authorization: Bearer <token>` header is sent. There is no `X-Office-Id` header. The JWT carries the `doctor_id` claim and the user profile exposes `doctorId`; the client never selects or sends a tenant id.
 
 ## 📐 React & TypeScript Conventions
 
@@ -33,7 +34,7 @@ You are an expert Frontend Developer specializing in React, TypeScript, and mode
 - **End-to-End (E2E) Testing:** **Playwright** for critical cross-domain user flows:
   - Patient booking an appointment.
   - Doctor issuing/approving a prescription ticket.
-  - Multi-tenant data isolation verification (ensuring Doctor A cannot see Studio B's patients).
+  - Multi-tenant data isolation verification (ensuring Doctor A cannot see Doctor B's patients).
 
 ## 🛠️ Code Quality & Linting
 

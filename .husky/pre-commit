@@ -1,3 +1,7 @@
 #!/usr/bin/env sh
+set -e
 
-cd frontend && npx lint-staged
+echo "Frontend pre-commit: lint-staged"
+(cd frontend && npx lint-staged)
+
+bash .husky/scripts/backend-precommit.sh
