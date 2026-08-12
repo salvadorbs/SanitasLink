@@ -53,7 +53,7 @@ jobs:
 
       - name: Build backend
         working-directory: backend
-        run: ./mvnw -q -pl core-module -am package -DskipTests
+        run: ./mvnw -q -pl app-module -am package -DskipTests
 
       - name: Extract OpenAPI spec from backend
         env:
@@ -62,10 +62,11 @@ jobs:
           SANITASLINK_DB_PASSWORD: app_user
           SANITASLINK_FLYWAY_USER: db_owner
           SANITASLINK_FLYWAY_PASSWORD: db_owner
-          # Dev-only HMAC secret; the update job only serves /v3/api-docs.
+          # Dev-only HMAC secret and AES encryption key; the update job only serves /v3/api-docs.
           SANITASLINK_JWT_SECRET: c2FuaXRhc2xpbmstZGV2LWhtYWMtc2VjcmV0LWtleS0wMTIzNDU2Nzg5YWJjZGVmLTAxMjM0NTY3ODk=
+          SANITASLINK_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
         run: |
-          java -jar backend/core-module/target/core-module-0.0.1-SNAPSHOT.jar &
+          java -jar backend/app-module/target/app-module-0.0.1-SNAPSHOT.jar &
           APP_PID=$!
           trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do
