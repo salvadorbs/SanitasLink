@@ -4,6 +4,15 @@ Welcome to the **E-Health Multi-Tenant System** codebase. You are an expert Ente
 
 Follow these rules and conventions strictly whenever reading, modifying, or generating code in this repository.
 
+## 📚 Documentation & Guidance
+
+Before implementing or modifying anything, **read and follow the relevant guidance**:
+
+- **`AGENTS.md` (this file)** — project-wide architecture, tenancy and conventions.
+- **`backend/AGENTS.md`** — backend (Spring Boot / Java) conventions, Flyway and database rules, RBAC, RLS and testing strategy.
+- **`frontend/AGENTS.md`** — frontend (React / Vite) conventions, API client/Orval rules and testing strategy.
+- **`docs/`** — technical documentation in English describing the current architecture, security model and database design. **Read it when it covers the area you are working on**, and **keep it up to date** whenever behavior, schema or security properties change. Documentation is part of the deliverable, not an afterthought.
+
 ---
 
 ## 🏛️ System Overview & Architecture
@@ -14,16 +23,18 @@ Follow these rules and conventions strictly whenever reading, modifying, or gene
 
 ### Core Architectural Principles
 1. **Strict Domain Isolation:** Modules (`core`, `patient`, `appointment`, `prescription`) must be decoupled. Cross-module communications happen via clean service interfaces or domain events.
-2. **Multi-Tenancy First:** Every tenant represents a **Doctor**. All domain entities belong to a tenant. Never leak data across `doctor_id` boundaries.
+2. **Multi-Tenancy First:** Every tenant represents an **Office** (studio). All domain entities belong to a tenant. Never leak data across `office_id` boundaries.
 3. **Auditability:** Any read/write operation on sensitive patient data must trigger an immutable audit event.
 
-### Multi-Tenancy Model (Doctor-Centred)
-- **Primary Tenant:** `doctor_id` identifies the owning doctor (`users.id`). The doctor is the primary owner of clinical information and patient records.
-- **RLS Isolation:** Every business table contains `doctor_id BIGINT NOT NULL` and is protected by PostgreSQL Row-Level Security comparing `doctor_id` against `current_setting('app.current_doctor_id', true)`. The transaction layer must run `SET LOCAL app.current_doctor_id = '<id>'` before any query.
-- **Identity Tables:** `users`, `roles` and `user_roles` are global identity tables and are NOT tenant-scoped.
-- **Roles:** Only `ROLE_ADMIN`, `ROLE_DOCTOR` and `ROLE_PATIENT` exist. There are no secretary roles or doctor-secretary associations.
-- **JWT Context:** The authenticated JWT carries the `doctor_id` claim. The server derives the tenant exclusively from the JWT; no client-side tenant header is sent or accepted.
-- **No Office Concept:** The `office`/`studio` entity, `office_users` membership and the `X-Office-Id` header do not exist in this codebase.
+### Multi-Tenancy Model (Office-Centred)
+- **Primary Tenant:** `office_id` (UUID) identifies the owning office. The office is the primary owner of clinical information and patient records.
+- **RLS Isolation:** Every business table contains `office_id UUID NOT NULL` (or is explicitly global) and is protected by PostgreSQL Row-Level Security comparing `office_id` against `current_setting('app.current_office_id', true)`. The transaction layer must run `set_config('app.current_office_id', '<id>', false)` (equivalent to `SET LOCAL`) on the current JDBC connection before any tenant-scoped query. Only `SET LOCAL` semantics are allowed — session-level `SET` leaks across pooled connections.
+- **Database Roles:** Flyway runs as `db_owner` (table owner); the runtime application connects as `app_user`, which must never own tables so RLS always applies. Tenant tables use `FORCE ROW LEVEL SECURITY`.
+- **Identity Tables:** `users`, `roles`, `permissions`, `role_permissions` are global identity/catalog tables and are NOT tenant-scoped. `office_memberships` and `user_roles` are RLS-protected access-control metadata.
+- **Mono-Office Invariant:** A user can belong to at most one office (enforced by the primary key on `office_memberships.user_id`) and must hold at least one active office role.
+- **Roles & Permissions:** Roles (`scope = PLATFORM | OFFICE`), permissions and `role_permissions` are **database-managed and fully mutable**; authorization is re-resolved from the database on every request. Seeded office roles: `MEDICO_TITOLARE`, `MEDICO_COLLABORATORE`, `SEGRETARIA_BASE`, `SEGRETARIA_AVANZATA`. Platform role: `ADMIN`. Multiple role assignments aggregate permissions (set union / logical OR).
+- **JWT Context:** The authenticated JWT carries the `office_id` claim (plus informational `roles` and `permissions` claims). The server derives the tenant exclusively from the JWT and the server-side membership; **no client-side tenant header is sent or accepted** (there is no `X-Office-Id` and no `X-Doctor-Id`).
+- **Staff:** `CORE_STAFF_INVITE` invites collaborators; `CORE_STAFF_MANAGE` manages memberships and roles. Staff onboarding uses admin provisioning plus one-time invitation tokens.
 
 ---
 
@@ -48,12 +59,15 @@ Follow these rules and conventions strictly whenever reading, modifying, or gene
 ```text
 /
 ├── backend/                           # Spring Boot Modular Monolith
+│   ├── AGENTS.md                      # Backend agent guidelines
 │   ├── pom.xml                        # Parent Maven POM
-│   ├── core-module/                   # Auth, Multi-Tenancy, Audit, Base Models
+│   ├── core-module/                   # Identity, Offices, Auth, RBAC, Audit, Tenancy
 │   ├── patient-module/                # Patient Demographics & Delegate profiles
 │   ├── appointment-module/            # Agenda, Slots, Booking Workflows
 │   └── prescription-module/           # Prescription Tickets & Approvals
+├── docs/                              # Technical documentation (English)
 ├── frontend/                          # React + Vite SPA
+│   ├── AGENTS.md                      # Frontend agent guidelines
 │   ├── e2e/                           # Playwright E2E test suite
 │   ├── src/
 │   │   ├── api/                       # Auto-generated Orval hooks & Axios instance

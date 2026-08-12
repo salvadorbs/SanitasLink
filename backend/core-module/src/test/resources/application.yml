@@ -1,0 +1,25 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+
+sanitaslink:
+  office:
+    require-context: false
+  security:
+    jwt:
+      secret: c2FuaXRhc2xpbmstdGVzdC1zZWNyZXQta2V5LTAxMjM0NTY3ODlhYmNkZWYtMDEyMzQ1Njc4OQ==
+      issuer: sanitaslink-backend
+      access-token-ttl: 15m
+      refresh-token-ttl: 7d
+    login-rate-limit:
+      max-requests: 1000
+      window: 1m
+  tokens:
+    invitation-ttl: 72h
+    password-reset-ttl: 24h
+  notifications:
+    log-secrets: true

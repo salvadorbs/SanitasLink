@@ -27,13 +27,14 @@ spring:
       - classpath:db/migration
 
 sanitaslink:
-  doctor:
+  office:
     require-context: false
   security:
     jwt:
       secret: ${SANITASLINK_JWT_SECRET:}
       issuer: sanitaslink-backend
-      access-token-ttl: 1h
+      access-token-ttl: 15m
+      refresh-token-ttl: 7d
     login-rate-limit:
       max-requests: 30
       window: 1m
@@ -41,6 +42,11 @@ sanitaslink:
     cors:
       allowed-origins:
         - http://localhost:5173
+  tokens:
+    invitation-ttl: 72h
+    password-reset-ttl: 24h
+  notifications:
+    log-secrets: false
 
 springdoc:
   api-docs:
@@ -56,3 +62,5 @@ sanitaslink:
   security:
     jwt:
       secret: c2FuaXRhc2xpbmstZGV2LWhtYWMtc2VjcmV0LWtleS0wMTIzNDU2Nzg5YWJjZGVmLTAxMjM0NTY3ODk=
+  notifications:
+    log-secrets: true
