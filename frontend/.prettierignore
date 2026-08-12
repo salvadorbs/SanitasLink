@@ -2,6 +2,8 @@ node_modules
 dist
 coverage
 package-lock.json
+src/api/endpoints
+src/api/models
 e2e/test-results
 e2e/playwright-report
 *.min.js

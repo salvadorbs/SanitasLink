@@ -6,32 +6,53 @@ spring:
     name: sanitaslink-backend
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/sanitaslink_db
-    username: sanitaslink_user
-    password: sanitaslink_password
+    url: ${SANITASLINK_DB_URL:jdbc:postgresql://localhost:5432/sanitaslink_db}
+    username: ${SANITASLINK_DB_USERNAME:app_user}
+    password: ${SANITASLINK_DB_PASSWORD:app_user}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: true
     properties:
       hibernate:
         format_sql: true
 
   flyway:
     enabled: true
-    baseline-on-migrate: true
+    url: ${SANITASLINK_FLYWAY_URL:jdbc:postgresql://localhost:5432/sanitaslink_db}
+    user: ${SANITASLINK_FLYWAY_USER:db_owner}
+    password: ${SANITASLINK_FLYWAY_PASSWORD:db_owner}
     locations:
       - classpath:db/migration
 
-  data:
-    redis:
-      host: localhost
-      port: 6379
+sanitaslink:
+  doctor:
+    require-context: false
+  security:
+    jwt:
+      secret: ${SANITASLINK_JWT_SECRET:}
+      issuer: sanitaslink-backend
+      access-token-ttl: 1h
+    login-rate-limit:
+      max-requests: 30
+      window: 1m
+      trusted-proxy: false
+    cors:
+      allowed-origins:
+        - http://localhost:5173
 
 springdoc:
   api-docs:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+sanitaslink:
+  security:
+    jwt:
+      secret: c2FuaXRhc2xpbmstZGV2LWhtYWMtc2VjcmV0LWtleS0wMTIzNDU2Nzg5YWJjZGVmLTAxMjM0NTY3ODk=

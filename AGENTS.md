@@ -27,6 +27,22 @@ Follow these rules and conventions strictly whenever reading, modifying, or gene
 
 ---
 
+## 🌿 Branching Model (GitFlow) & CI
+
+* **`develop`:** default development branch. All feature, fix and chore work is merged here.
+* **`master`:** stable/production branch. Holds tagged releases; receives only release merges. Never commit directly.
+* **CI on pull requests/push (`ci.yml`):** runs on PRs targeting `develop`/`master` and on pushes to `develop`. It executes the full backend build + tests (`./mvnw clean verify`, Testcontainers included) and the frontend lint, typecheck, tests and build.
+* **Orval automation (`update-openapi.yml`):** runs weekly (and manually) and:
+  1. starts a throwaway PostgreSQL + the backend in CI;
+  2. extracts `/v3/api-docs` into `frontend/src/api/openapi.json` (formatted with `jq .`, the canonical committed artifact);
+  3. regenerates the Orval client (`npm run generate:api`);
+  4. opens a PR into `develop` when the generated code changed.
+* **Orval source of truth:** `orval.config.ts` reads from the committed `frontend/src/api/openapi.json` (override with the `OPENAPI_TARGET` env var, e.g. a live backend URL).
+* **Dependabot (`dependabot.yml`):** weekly PRs for Maven and npm dependency updates.
+* **Secret scanning (`secret-scan.yml`):** gitleaks (Docker image, no license required) scans the full history on push and pull requests.
+
+---
+
 ## 📁 Repository Structure Overview
 
 ```text

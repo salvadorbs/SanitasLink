@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @EnableJpaRepositories(basePackages = "com.sanitaslink")
 public class SanitasLinkApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(SanitasLinkApplication.class, args);
-    }
+  public static void main(String[] args) {
+    SpringApplication.run(SanitasLinkApplication.class, args);
+  }
 }

@@ -1,0 +1,99 @@
+name: update-openapi
+
+on:
+  schedule:
+    # Weekly on Monday at 06:00 UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sanitaslink_db
+          POSTGRES_USER: db_owner
+          POSTGRES_PASSWORD: db_owner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U db_owner -d sanitaslink_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Create app_user role and grants
+        run: |
+          docker exec -i "${{ job.services.postgres.id }}" psql -U db_owner -d sanitaslink_db < docker/postgres-init.sql
+
+      - name: Build backend
+        working-directory: backend
+        run: ./mvnw -q -pl core-module -am package -DskipTests
+
+      - name: Extract OpenAPI spec from backend
+        env:
+          SANITASLINK_DB_URL: jdbc:postgresql://localhost:5432/sanitaslink_db
+          SANITASLINK_DB_USERNAME: app_user
+          SANITASLINK_DB_PASSWORD: app_user
+          SANITASLINK_FLYWAY_USER: db_owner
+          SANITASLINK_FLYWAY_PASSWORD: db_owner
+          # Dev-only HMAC secret; the update job only serves /v3/api-docs.
+          SANITASLINK_JWT_SECRET: c2FuaXRhc2xpbmstZGV2LWhtYWMtc2VjcmV0LWtleS0wMTIzNDU2Nzg5YWJjZGVmLTAxMjM0NTY3ODk=
+        run: |
+          java -jar backend/core-module/target/core-module-0.0.1-SNAPSHOT.jar &
+          APP_PID=$!
+          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/v3/api-docs >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:8080/v3/api-docs | jq . > frontend/src/api/openapi.json
+
+      - name: Regenerate Orval client
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run generate:api
+
+      - name: Open PR if generated code changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/update-openapi
+          base: develop
+          title: 'chore(api): refresh OpenAPI spec and regenerate client'
+          commit-message: 'chore(api): refresh OpenAPI spec and regenerate client'
+          body: |
+            Automated update produced by the `update-openapi` workflow.
+
+            Refreshes `frontend/src/api/openapi.json` from the backend OpenAPI
+            endpoint and regenerates the Orval client. Review the diff and merge
+            when the API contract looks correct.
+          delete-branch: true
