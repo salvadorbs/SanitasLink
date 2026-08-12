@@ -153,6 +153,8 @@ public class AuthService {
   @Transactional
   public LoginResponse refresh(RefreshTokenRequest request) {
     String hash = TokenGenerator.sha256Hex(request.refreshToken());
+    // The raw refresh token is the bearer credential for this lookup.
+    tenantContextManager.initializeWithToken(hash);
     RefreshToken token =
         refreshTokenRepository.findByTokenHash(hash).orElseThrow(this::invalidRefreshToken);
     if (token.getRevokedAt() != null || token.getExpiresAt().isBefore(Instant.now())) {
@@ -164,16 +166,19 @@ public class AuthService {
       throw invalidRefreshToken();
     }
 
-    token.setRevokedAt(Instant.now());
+    tenantContextManager.initialize(null, user.getId(), false);
+
+    // Atomic claim: only the caller that revokes the token first may rotate it.
+    if (refreshTokenRepository.revokeIfActive(token.getId(), Instant.now()) == 0) {
+      throw invalidRefreshToken();
+    }
     String newRawRefresh = TokenGenerator.randomToken();
-    token.setReplacedByTokenHash(TokenGenerator.sha256Hex(newRawRefresh));
     refreshTokenRepository.save(
         RefreshToken.create(
             UUID.randomUUID(),
             user.getId(),
             TokenGenerator.sha256Hex(newRawRefresh),
             Instant.now().plus(jwtProperties.getRefreshTokenTtl())));
-    refreshTokenRepository.save(token);
 
     LoginResponse response = issueTokenPair(user);
     auditService.recordAs(
@@ -185,10 +190,12 @@ public class AuthService {
   @Transactional
   public void logout(LogoutRequest request) {
     String hash = TokenGenerator.sha256Hex(request.refreshToken());
+    tenantContextManager.initializeWithToken(hash);
     refreshTokenRepository
         .findByTokenHash(hash)
         .ifPresent(
             token -> {
+              tenantContextManager.initialize(null, token.getUserId(), false);
               token.setRevokedAt(Instant.now());
               refreshTokenRepository.save(token);
             });
@@ -283,9 +290,11 @@ public class AuthService {
           new UserRole(user.getId(), invitation.getRoleId(), invitation.getCreatedByUserId()));
     }
 
-    invitation.setStatus(InvitationStatus.ACCEPTED);
-    invitation.setAcceptedAt(Instant.now());
-    invitationRepository.save(invitation);
+    // Atomic claim: exactly one concurrent acceptance may consume the pending invitation.
+    if (invitationRepository.claimPending(invitation.getId(), Instant.now()) == 0) {
+      throw new ApiException(
+          ErrorCodes.INVITATION_ALREADY_USED, HttpStatus.CONFLICT, "Invitation already used");
+    }
 
     auditService.recordAs(
         user.getId(),
@@ -301,6 +310,7 @@ public class AuthService {
     String email = User.normalizeEmail(request.email());
     User user = userRepository.findByEmail(email).orElse(null);
     if (user != null && UserStatus.ACTIVE.equals(user.getStatus())) {
+      tenantContextManager.initialize(null, user.getId(), false);
       String rawToken = TokenGenerator.randomToken();
       passwordResetTokenRepository.save(
           PasswordResetToken.create(
@@ -319,6 +329,8 @@ public class AuthService {
   @Transactional
   public void confirmPasswordReset(ConfirmPasswordResetRequest request) {
     String hash = TokenGenerator.sha256Hex(request.token());
+    // The reset token is the bearer credential for this lookup.
+    tenantContextManager.initializeWithToken(hash);
     PasswordResetToken token =
         passwordResetTokenRepository
             .findByTokenHash(hash)
@@ -347,13 +359,19 @@ public class AuthService {
                         HttpStatus.UNAUTHORIZED,
                         "Invalid reset token"));
 
+    tenantContextManager.initialize(null, user.getId(), false);
+
+    // Atomic claim: exactly one concurrent confirmation may consume the reset token.
+    if (passwordResetTokenRepository.claimUnused(token.getId(), Instant.now()) == 0) {
+      throw new ApiException(
+          ErrorCodes.INVALID_RESET_TOKEN, HttpStatus.UNAUTHORIZED, "Invalid reset token");
+    }
+
     user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
     user.setPasswordChangedAt(Instant.now());
     user.setStatus(UserStatus.ACTIVE);
+    user.setSecurityVersion(incrementSecurityVersion(user));
     userRepository.save(user);
-
-    token.setUsedAt(Instant.now());
-    passwordResetTokenRepository.save(token);
 
     revokeAllRefreshTokens(user.getId());
     auditService.recordAs(
@@ -363,6 +381,7 @@ public class AuthService {
   @Transactional
   public void changePassword(ChangePasswordRequest request) {
     TenantContext context = TenantContextHolder.require();
+    tenantContextManager.initialize();
     User user =
         userRepository
             .findById(context.userId())
@@ -377,6 +396,7 @@ public class AuthService {
     }
     user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
     user.setPasswordChangedAt(Instant.now());
+    user.setSecurityVersion(incrementSecurityVersion(user));
     userRepository.save(user);
     revokeAllRefreshTokens(user.getId());
     auditService.recordAs(
@@ -391,7 +411,8 @@ public class AuthService {
             user.getEmail(),
             resolution.officeId(),
             resolution.roles(),
-            resolution.admin());
+            resolution.admin(),
+            resolution.securityVersion());
     String accessToken =
         jwtTokenService.issueAccessToken(principal, resolution.roles(), resolution.permissions());
     String rawRefresh = TokenGenerator.randomToken();
@@ -403,6 +424,11 @@ public class AuthService {
             Instant.now().plus(jwtProperties.getRefreshTokenTtl())));
     long expiresIn = jwtProperties.getAccessTokenTtl().toSeconds();
     return new LoginResponse(accessToken, rawRefresh, expiresIn, "Bearer");
+  }
+
+  private int incrementSecurityVersion(User user) {
+    int current = user.getSecurityVersion() == null ? 0 : user.getSecurityVersion();
+    return current + 1;
   }
 
   private void revokeAllRefreshTokens(UUID userId) {

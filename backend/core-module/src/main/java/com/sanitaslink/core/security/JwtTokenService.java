@@ -43,7 +43,8 @@ public class JwtTokenService {
             .id(UUID.randomUUID().toString())
             .claim("email", user.email())
             .claim("roles", roles.stream().sorted().toList())
-            .claim("permissions", permissions.stream().sorted().toList());
+            .claim("permissions", permissions.stream().sorted().toList())
+            .claim("sv", user.securityVersion());
     if (user.officeId() != null) {
       claims.claim("office_id", user.officeId().toString());
     }

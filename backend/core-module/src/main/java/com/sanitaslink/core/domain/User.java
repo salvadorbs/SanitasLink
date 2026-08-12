@@ -47,6 +47,9 @@ public class User extends AbstractBaseEntity {
   @Column(name = "locked_until")
   private Instant lockedUntil;
 
+  @Column(name = "security_version", nullable = false)
+  private Integer securityVersion = 0;
+
   public static User invited(
       UUID id, String email, String firstName, String lastName, String phone) {
     User user = new User();
@@ -56,6 +59,7 @@ public class User extends AbstractBaseEntity {
     user.lastName = lastName;
     user.phone = phone;
     user.status = UserStatus.INVITED;
+    user.securityVersion = 0;
     return user;
   }
 
@@ -149,5 +153,13 @@ public class User extends AbstractBaseEntity {
 
   public void setLockedUntil(Instant lockedUntil) {
     this.lockedUntil = lockedUntil;
+  }
+
+  public Integer getSecurityVersion() {
+    return securityVersion;
+  }
+
+  public void setSecurityVersion(Integer securityVersion) {
+    this.securityVersion = securityVersion;
   }
 }

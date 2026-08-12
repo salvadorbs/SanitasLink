@@ -28,6 +28,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -46,7 +47,8 @@ import tools.jackson.databind.ObjectMapper;
   TokenProperties.class,
   CorsProperties.class,
   LoginRateLimitProperties.class,
-  NotificationProperties.class
+  NotificationProperties.class,
+  CryptoProperties.class
 })
 public class SecurityConfig {
 
@@ -96,9 +98,12 @@ public class SecurityConfig {
 
   @Bean
   public JwtDecoder jwtDecoder(JwtProperties properties) {
-    return NimbusJwtDecoder.withSecretKey(secretKey(properties))
-        .macAlgorithm(MacAlgorithm.HS256)
-        .build();
+    NimbusJwtDecoder decoder =
+        NimbusJwtDecoder.withSecretKey(secretKey(properties))
+            .macAlgorithm(MacAlgorithm.HS256)
+            .build();
+    decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.getIssuer()));
+    return decoder;
   }
 
   @Bean

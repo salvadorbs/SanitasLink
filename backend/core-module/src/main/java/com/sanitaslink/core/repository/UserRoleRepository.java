@@ -16,6 +16,13 @@ public interface UserRoleRepository extends JpaRepository<UserRole, UserRole.Use
 
   long deleteByUserId(UUID userId);
 
+  /** Role ids assigned to a user, filtered by role scope. */
+  @Query(
+      "SELECT ur.roleId FROM UserRole ur JOIN Role r ON r.id = ur.roleId "
+          + "WHERE ur.userId = :userId AND r.scope = :scope")
+  List<UUID> findRoleIdsByUserIdAndScope(
+      @Param("userId") UUID userId, @Param("scope") String scope);
+
   /**
    * Counts active office members currently assigned the given role code in the office. Used to
    * protect the invariant that the last practice owner cannot be removed.

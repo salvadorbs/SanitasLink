@@ -57,11 +57,12 @@ public class PermissionResolver {
       UUID officeId,
       boolean active,
       boolean admin,
+      int securityVersion,
       List<String> roles,
       Set<String> permissions) {
 
     static Resolution inactive(UUID userId, String email) {
-      return new Resolution(userId, email, null, false, false, List.of(), Set.of());
+      return new Resolution(userId, email, null, false, false, 0, List.of(), Set.of());
     }
   }
 
@@ -99,12 +100,14 @@ public class PermissionResolver {
     roles.addAll(platformRoles);
     roles.addAll(officeRoles);
 
+    int securityVersion = user.getSecurityVersion() == null ? 0 : user.getSecurityVersion();
     return new Resolution(
         userId,
         user.getEmail(),
         officeId,
         true,
         admin,
+        securityVersion,
         List.copyOf(roles),
         Set.copyOf(permissionCodes));
   }

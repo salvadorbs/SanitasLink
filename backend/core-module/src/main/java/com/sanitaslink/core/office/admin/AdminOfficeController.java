@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,7 +43,7 @@ public class AdminOfficeController {
   @Operation(summary = "Provision a new office with its titular doctor")
   public ResponseEntity<OfficeResponse> createOffice(
       @Valid @RequestBody CreateOfficeRequest request) {
-    return ResponseEntity.ok(adminOfficeService.createOffice(request));
+    return ResponseEntity.status(HttpStatus.CREATED).body(adminOfficeService.createOffice(request));
   }
 
   @GetMapping("/offices")
@@ -67,7 +68,8 @@ public class AdminOfficeController {
   @Operation(summary = "Provision a collaborator into an office")
   public ResponseEntity<InvitationResponse> addMember(
       @PathVariable UUID officeId, @Valid @RequestBody InviteMemberRequest request) {
-    return ResponseEntity.ok(invitationService.invite(officeId, request));
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(invitationService.invite(officeId, request));
   }
 
   @GetMapping("/roles")

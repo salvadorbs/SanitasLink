@@ -84,13 +84,12 @@ public class MembershipService {
     tenantContextManager.initialize();
     TenantContext actor = officeGuard.requireOfficeAccess(officeId);
     OfficeMembership membership = requireActiveMember(officeId, userId);
-    Role role =
-        roleRepository
-            .findById(roleId)
-            .orElseThrow(
-                () ->
-                    new ApiException(
-                        ErrorCodes.ROLE_NOT_FOUND, HttpStatus.NOT_FOUND, "Role not found"));
+    // Only OFFICE-scope roles can be managed through the office. This prevents an office manager
+    // from revoking platform role assignments (e.g. ADMIN).
+    Role role = requireOfficeRole(roleId);
+    if (!userRoleRepository.existsByUserIdAndRoleId(userId, roleId)) {
+      return;
+    }
 
     List<String> officeRoles = roleRepository.findActiveRoleCodesForUser(userId, RoleScope.OFFICE);
     if (officeRoles.size() <= 1) {
@@ -125,7 +124,11 @@ public class MembershipService {
             ErrorCodes.LAST_PRACTICE_OWNER, "The last practice owner cannot be removed");
       }
     }
-    userRoleRepository.deleteByUserId(userId);
+    // Remove only OFFICE-scope roles; platform roles (e.g. ADMIN) are not office-managed.
+    List<UUID> officeRoleIds =
+        userRoleRepository.findRoleIdsByUserIdAndScope(userId, RoleScope.OFFICE);
+    officeRoleIds.forEach(
+        roleId -> userRoleRepository.deleteById(new UserRole.UserRoleId(userId, roleId)));
     membership.setStatus(MembershipStatus.REVOKED);
     membership.setRevokedAt(java.time.Instant.now());
     membershipRepository.save(membership);

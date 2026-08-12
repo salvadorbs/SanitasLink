@@ -27,8 +27,11 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
     String officeIdClaim = jwt.getClaimAsString("office_id");
     UUID officeId = officeIdClaim == null ? null : UUID.fromString(officeIdClaim);
     boolean admin = roles != null && roles.stream().anyMatch("ADMIN"::equals);
+    Number sv = jwt.getClaim("sv");
+    int securityVersion = sv == null ? 0 : sv.intValue();
 
-    AuthenticatedUser principal = new AuthenticatedUser(userId, email, officeId, roles, admin);
+    AuthenticatedUser principal =
+        new AuthenticatedUser(userId, email, officeId, roles, admin, securityVersion);
 
     Collection<GrantedAuthority> authorities =
         roles == null
@@ -37,6 +40,6 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
                 .collect(Collectors.toList());
 
-    return new UsernamePasswordAuthenticationToken(principal, jwt.getTokenValue(), authorities);
+    return new UsernamePasswordAuthenticationToken(principal, jwt, authorities);
   }
 }

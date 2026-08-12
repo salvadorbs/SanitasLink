@@ -5,10 +5,12 @@ spring:
   application:
     name: sanitaslink-backend
 
+  # Credentials are required: the application fails fast when the environment
+  # variables are missing. No production-default passwords are shipped.
   datasource:
     url: ${SANITASLINK_DB_URL:jdbc:postgresql://localhost:5432/sanitaslink_db}
-    username: ${SANITASLINK_DB_USERNAME:app_user}
-    password: ${SANITASLINK_DB_PASSWORD:app_user}
+    username: ${SANITASLINK_DB_USERNAME}
+    password: ${SANITASLINK_DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -21,8 +23,8 @@ spring:
   flyway:
     enabled: true
     url: ${SANITASLINK_FLYWAY_URL:jdbc:postgresql://localhost:5432/sanitaslink_db}
-    user: ${SANITASLINK_FLYWAY_USER:db_owner}
-    password: ${SANITASLINK_FLYWAY_PASSWORD:db_owner}
+    user: ${SANITASLINK_FLYWAY_USER}
+    password: ${SANITASLINK_FLYWAY_PASSWORD}
     locations:
       - classpath:db/migration
 
@@ -35,6 +37,8 @@ sanitaslink:
       issuer: sanitaslink-backend
       access-token-ttl: 15m
       refresh-token-ttl: 7d
+    encryption:
+      key: ${SANITASLINK_ENCRYPTION_KEY}
     login-rate-limit:
       max-requests: 30
       window: 1m
@@ -58,9 +62,17 @@ spring:
   config:
     activate:
       on-profile: dev
+  datasource:
+    username: app_user
+    password: app_user
+  flyway:
+    user: db_owner
+    password: db_owner
 sanitaslink:
   security:
     jwt:
       secret: c2FuaXRhc2xpbmstZGV2LWhtYWMtc2VjcmV0LWtleS0wMTIzNDU2Nzg5YWJjZGVmLTAxMjM0NTY3ODk=
+    encryption:
+      key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
   notifications:
     log-secrets: true

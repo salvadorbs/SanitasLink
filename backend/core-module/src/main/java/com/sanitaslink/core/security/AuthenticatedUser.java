@@ -5,7 +5,8 @@ import java.util.UUID;
 
 /**
  * The authenticated principal. Holds identity data derived from the JWT; role/permission
- * authorities are refreshed from the database on every request.
+ * authorities are refreshed from the database on every request. {@code securityVersion} is the
+ * password/security version used to invalidate access tokens after a password change or reset.
  */
 public record AuthenticatedUser(
-    UUID id, String email, UUID officeId, List<String> roles, boolean admin) {}
+    UUID id, String email, UUID officeId, List<String> roles, boolean admin, int securityVersion) {}

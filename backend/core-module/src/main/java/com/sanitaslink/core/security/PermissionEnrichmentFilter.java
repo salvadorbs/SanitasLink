@@ -53,13 +53,20 @@ public class PermissionEnrichmentFilter extends OncePerRequestFilter {
           return;
         }
 
+        // Reject access tokens issued before the latest password change/reset (security version).
+        if (principal.securityVersion() != resolution.securityVersion()) {
+          writeForbidden(response);
+          return;
+        }
+
         AuthenticatedUser refreshed =
             new AuthenticatedUser(
                 resolution.userId(),
                 resolution.email(),
                 resolution.officeId(),
                 resolution.roles(),
-                resolution.admin());
+                resolution.admin(),
+                resolution.securityVersion());
         permissionResolver.toContext(resolution);
 
         List<GrantedAuthority> authorities = new ArrayList<>();

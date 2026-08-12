@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -97,7 +98,8 @@ public class OfficeController {
   @Operation(summary = "Invite a collaborator to the office")
   public ResponseEntity<InvitationResponse> inviteMember(
       @PathVariable UUID officeId, @Valid @RequestBody InviteMemberRequest request) {
-    return ResponseEntity.ok(invitationService.invite(officeId, request));
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(invitationService.invite(officeId, request));
   }
 
   @GetMapping("/{officeId}/invitations")
