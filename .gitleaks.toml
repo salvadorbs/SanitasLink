@@ -1,0 +1,27 @@
+# SanitasLink gitleaks configuration.
+# Extends the default rule set and allowlists the local development/test-only values that are
+# intentionally committed for the `dev` profile and the automated test suite. These are NOT
+# production secrets: the real JWT secret, encryption key and database credentials are always
+# provided via environment variables outside the `dev` profile.
+
+title = "SanitasLink gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known local development/test-only values"
+
+regexes = [
+  # Dev/test HMAC JWT secrets used only by the dev profile and the OpenAPI CI job
+  '''c2FuaXRhc2xpbmstZGV2LWhtYWMtc2VjcmV0LWtleS0wMTIzNDU2Nzg5YWJjZGVmLTAxMjM0NTY3ODk=''',
+  '''c2FuaXRhc2xpbmstdGVzdC1zZWNyZXQta2V5LTAxMjM0NTY3ODlhYmNkZWYtMDEyMzQ1Njc4OQ==''',
+  # Dev/test AES encryption key (base64 of "0123456789abcdef0123456789abcdef") and its plaintext
+  '''MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=''',
+  '''0123456789abcdef0123456789abcdef''',
+  # Test-only encryption key in unit tests and its plaintext
+  '''YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk=''',
+  '''abcdef0123456789abcdef0123456789''',
+  # Test-only passwords used by the integration test suite
+  '''owner-pass-123''',
+]
