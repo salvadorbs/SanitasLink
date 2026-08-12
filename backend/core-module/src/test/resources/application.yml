@@ -15,6 +15,8 @@ sanitaslink:
       issuer: sanitaslink-backend
       access-token-ttl: 15m
       refresh-token-ttl: 7d
+    encryption:
+      key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
     login-rate-limit:
       max-requests: 1000
       window: 1m

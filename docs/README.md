@@ -34,9 +34,11 @@ subsystem:
 - Admin-driven office provisioning and email invitations;
 - password reset and first-access password setup;
 - PostgreSQL Row-Level Security for tenant isolation;
-- immutable audit trail;
+- immutable audit trail with request metadata;
+- encryption-at-rest for sensitive clinical fields;
+- clinical domain foundation: patient registry, appointments and prescriptions with granular
+  permissions and read/write audit;
 - RFC 7807 error responses.
 
-The frontend, the clinical modules (patients, appointments, prescriptions) and the self-service
-practice-owner registration are intentionally out of scope and will be built on top of this
-subsystem.
+The frontend and the self-service practice-owner registration are intentionally out of scope and
+will be built on top of this subsystem.

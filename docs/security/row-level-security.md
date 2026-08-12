@@ -41,8 +41,15 @@ before any tenant-scoped query.
 - `office_invitations`: members and admins manage invitations of their office; additionally, an
   invitation can be read by whoever presents the matching token hash (the bearer credential of
   the acceptance flow).
-- `audit_events`: reads are limited to the owning office (or admin); inserts are always allowed;
-  updates and deletes are blocked by the immutable trigger and by the absence of policies.
+- `refresh_tokens` and `password_reset_tokens`: reads are allowed for the owning user, for the
+  bearer of the matching token hash and for admins; writes require the owning user's context (or
+  admin).
+- `patients`, `appointments`, `prescriptions`: office members can access only their office's
+  clinical data; admins see everything.
+- `audit_events`: reads are limited to the owning office (or admin); global events are readable
+  only by admins; inserts require the current office context (or admin) unless the event is
+  genuinely global; updates and deletes are blocked by the immutable trigger and by the absence of
+  policies.
 
 ## Context bootstrap
 

@@ -18,5 +18,19 @@ public final class AuditActionType {
   public static final String MEMBER_ROLE_CHANGED = "MEMBER_ROLE_CHANGED";
   public static final String MEMBER_REMOVED = "MEMBER_REMOVED";
 
+  public static final String PATIENT_CREATED = "PATIENT_CREATED";
+  public static final String PATIENT_READ = "PATIENT_READ";
+  public static final String PATIENT_UPDATED = "PATIENT_UPDATED";
+  public static final String PATIENT_CLINICAL_READ = "PATIENT_CLINICAL_READ";
+  public static final String PATIENT_CLINICAL_WRITE = "PATIENT_CLINICAL_WRITE";
+  public static final String APPOINTMENT_CREATED = "APPOINTMENT_CREATED";
+  public static final String APPOINTMENT_READ = "APPOINTMENT_READ";
+  public static final String APPOINTMENT_UPDATED = "APPOINTMENT_UPDATED";
+  public static final String APPOINTMENT_CANCELLED = "APPOINTMENT_CANCELLED";
+  public static final String PRESCRIPTION_REQUESTED = "PRESCRIPTION_REQUESTED";
+  public static final String PRESCRIPTION_READ = "PRESCRIPTION_READ";
+  public static final String PRESCRIPTION_ISSUED = "PRESCRIPTION_ISSUED";
+  public static final String PRESCRIPTION_PRINTED = "PRESCRIPTION_PRINTED";
+
   private AuditActionType() {}
 }

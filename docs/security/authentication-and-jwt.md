@@ -12,6 +12,10 @@ Logging in with an email and password:
 
 Credential errors are **uniform** to prevent account enumeration.
 
+The login rate limiter is an in-memory fixed-window limiter keyed by client address. It is
+appropriate for a single-node deployment; a distributed limiter (or a shared store) must be used
+when the backend is scaled horizontally.
+
 ## Access token
 
 An access token is a JWT signed with HMAC-SHA256 using
@@ -25,6 +29,7 @@ An access token is a JWT signed with HMAC-SHA256 using
   "roles": ["MEDICO_TITOLARE"],
   "permissions": ["CORE_OFFICE_READ", "..."],
   "office_id": "<office-uuid>",
+  "sv": 0,
   "exp": 1699999999,
   "jti": "unique-token-id"
 }
@@ -33,8 +38,13 @@ An access token is a JWT signed with HMAC-SHA256 using
 > The `roles` and `permissions` claims are **informational only**. On every request a filter
 > re-resolves roles and permissions from the database, so administrative changes take effect
 > immediately and stale claims can never grant access.
+>
+> The `sv` claim is the user's security version. It is incremented on every password change and
+> reset, so access tokens issued before the change are rejected even before their natural expiry.
 
-The default access token TTL is 15 minutes (`sanitaslink.security.jwt.access-token-ttl`).
+The decoder enforces the configured issuer (`sanitaslink.security.jwt.issuer`) in addition to the
+signature. The default access token TTL is 15 minutes
+(`sanitaslink.security.jwt.access-token-ttl`).
 
 ## Refresh tokens
 

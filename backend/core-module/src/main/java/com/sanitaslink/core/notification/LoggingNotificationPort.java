@@ -4,14 +4,17 @@ import com.sanitaslink.core.config.NotificationProperties;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
  * Development-only notification port that logs the one-time token so the flow can be exercised
  * without an email provider. The raw token is only logged when {@code
- * sanitaslink.notifications.log-secrets} is enabled (dev/test profiles).
+ * sanitaslink.notifications.log-secrets} is enabled. It is wired only for the {@code dev} profile;
+ * other environments get the no-op port.
  */
 @Component
+@Profile("dev")
 public class LoggingNotificationPort implements NotificationPort {
 
   private static final Logger log = LoggerFactory.getLogger(LoggingNotificationPort.class);

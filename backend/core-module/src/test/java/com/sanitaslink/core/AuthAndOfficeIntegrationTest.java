@@ -8,10 +8,35 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.sanitaslink.core.auth.AuthService;
+import com.sanitaslink.core.auth.dto.AcceptInvitationRequest;
+import com.sanitaslink.core.auth.dto.ConfirmPasswordResetRequest;
+import com.sanitaslink.core.auth.dto.LoginRequest;
+import com.sanitaslink.core.auth.dto.LoginResponse;
+import com.sanitaslink.core.auth.dto.RefreshTokenRequest;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -50,6 +75,8 @@ class AuthAndOfficeIntegrationTest {
   @Autowired ObjectMapper objectMapper;
   @Autowired TestDataSeeder seeder;
   @Autowired RecordingNotificationPort notificationPort;
+  @Autowired AuthService authService;
+  @Autowired JwtEncoder jwtEncoder;
 
   private static int counter = 0;
 
@@ -78,7 +105,7 @@ class AuthAndOfficeIntegrationTest {
                 .put("ownerLastName", "Rossi")
                 .toString(),
             adminToken,
-            200);
+            201);
     String officeId = created.get("id").asText();
     assertThat(officeId).isNotBlank();
 
@@ -132,7 +159,7 @@ class AuthAndOfficeIntegrationTest {
             .put("roleId", baseSecretaryRoleId)
             .toString(),
         titularAccess,
-        200);
+        201);
     String secretaryInvitationToken = notificationPort.takeInvitationToken();
     assertThat(secretaryInvitationToken).isNotBlank();
     assertThat(notificationPort.lastInvitationEmail()).isEqualTo(secretaryEmail);
@@ -381,7 +408,7 @@ class AuthAndOfficeIntegrationTest {
             .put("roleId", collaboratorRoleId)
             .toString(),
         ownerToken,
-        200);
+        201);
     String collaboratorInvitation = notificationPort.takeInvitationToken();
     JsonNode collaboratorAccept =
         doPost(
@@ -418,8 +445,436 @@ class AuthAndOfficeIntegrationTest {
         409);
   }
 
+  @Test
+  void clinicalWorkflowsAndEncryptionAtRest() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    String adminToken = login(adminEmail, "admin-pass-123");
+    String officeId = createOffice(adminToken, "Studio Workflows", uniqueEmail("owner"));
+    String ownerToken = acceptAndLogin();
+
+    // Create a patient with a tax identifier and clinical notes.
+    String patientId =
+        doPost(
+                "/api/v1/offices/" + officeId + "/patients",
+                objectMapper
+                    .createObjectNode()
+                    .put("firstName", "Anna")
+                    .put("lastName", "Verdi")
+                    .put("taxIdentifier", "VRDANA85A41H501Z")
+                    .toString(),
+                ownerToken,
+                201)
+            .get("id")
+            .asText();
+    doPatch(
+        "/api/v1/offices/" + officeId + "/patients/" + patientId + "/clinical",
+        objectMapper
+            .createObjectNode()
+            .put("clinicalNotes", "allergie alla penicillina")
+            .toString(),
+        ownerToken,
+        200);
+
+    // Appointment lifecycle.
+    String appointmentId =
+        doPost(
+                "/api/v1/offices/" + officeId + "/appointments",
+                objectMapper
+                    .createObjectNode()
+                    .put("title", "Visita di controllo")
+                    .put("patientId", patientId)
+                    .put("startsAt", "2030-01-10T09:00:00Z")
+                    .put("endsAt", "2030-01-10T09:30:00Z")
+                    .toString(),
+                ownerToken,
+                201)
+            .get("id")
+            .asText();
+    doGet("/api/v1/offices/" + officeId + "/appointments", ownerToken, 200);
+    doDelete("/api/v1/offices/" + officeId + "/appointments/" + appointmentId, ownerToken, 204);
+
+    // Prescription lifecycle: request -> issue -> print.
+    String prescriptionId =
+        doPost(
+                "/api/v1/offices/" + officeId + "/prescriptions",
+                objectMapper
+                    .createObjectNode()
+                    .put("medication", "Amoxicillina 500mg")
+                    .put("patientId", patientId)
+                    .toString(),
+                ownerToken,
+                201)
+            .get("id")
+            .asText();
+    doPatch(
+        "/api/v1/offices/" + officeId + "/prescriptions/" + prescriptionId + "/issue",
+        ownerToken,
+        200);
+    doPatch(
+        "/api/v1/offices/" + officeId + "/prescriptions/" + prescriptionId + "/print",
+        ownerToken,
+        200);
+
+    // A base secretary cannot issue prescriptions but may create requests.
+    JsonNode roles = doGet("/api/v1/admin/roles", adminToken, 200);
+    String baseSecretaryRoleId = roleId(roles, "SEGRETARIA_BASE");
+    String secretaryEmail = uniqueEmail("secretary");
+    doPost(
+        "/api/v1/offices/" + officeId + "/invitations",
+        objectMapper
+            .createObjectNode()
+            .put("email", secretaryEmail)
+            .put("roleId", baseSecretaryRoleId)
+            .toString(),
+        ownerToken,
+        201);
+    String secretaryInvitation = notificationPort.takeInvitationToken();
+    JsonNode secretaryAccept =
+        doPost(
+            "/api/v1/auth/invitations/accept",
+            objectMapper
+                .createObjectNode()
+                .put("token", secretaryInvitation)
+                .put("firstName", "Sec")
+                .put("lastName", "Two")
+                .put("password", "sec-pass-123")
+                .toString(),
+            null,
+            201);
+    String secretaryToken = secretaryAccept.get("accessToken").asText();
+    doPatch(
+        "/api/v1/offices/" + officeId + "/prescriptions/" + prescriptionId + "/issue",
+        secretaryToken,
+        403);
+
+    // Sensitive fields are encrypted at rest: the stored value differs from the plaintext.
+    try (Connection connection =
+        DriverManager.getConnection(POSTGRES.getJdbcUrl(), "app_user", "app_user")) {
+      connection.setAutoCommit(false);
+      try (PreparedStatement st =
+          connection.prepareStatement("SELECT set_config('app.current_office_id', ?, true)")) {
+        st.setString(1, officeId);
+        st.execute();
+      }
+      try (PreparedStatement st =
+          connection.prepareStatement(
+              "SELECT tax_identifier, clinical_notes FROM patients WHERE id = ?::uuid")) {
+        st.setString(1, patientId);
+        try (ResultSet rs = st.executeQuery()) {
+          assertThat(rs.next()).isTrue();
+          assertThat(rs.getString(1)).isNotEqualTo("VRDANA85A41H501Z").isNotBlank();
+          assertThat(rs.getString(2)).isNotEqualTo("allergie alla penicillina").isNotBlank();
+        }
+      }
+      connection.rollback();
+    }
+  }
+
   private String ownerId(String ownerToken) throws Exception {
     return doGet("/api/v1/auth/me", ownerToken, 200).get("id").asText();
+  }
+
+  @Test
+  void rejectsTokenWithWrongIssuer() throws Exception {
+    String email = uniqueEmail("admin");
+    UUID adminId = seeder.createAdmin(email, "admin-pass-123");
+    JwtClaimsSet claims =
+        JwtClaimsSet.builder()
+            .issuer("evil-issuer")
+            .subject(adminId.toString())
+            .issuedAt(Instant.now())
+            .expiresAt(Instant.now().plusSeconds(3600))
+            .claim("email", email)
+            .claim("sv", 0)
+            .build();
+    String token =
+        jwtEncoder
+            .encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
+            .getTokenValue();
+    doGet("/api/v1/auth/me", token, 401);
+  }
+
+  @Test
+  void platformRoleCannotBeRevokedThroughOffice() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    String adminToken = login(adminEmail, "admin-pass-123");
+
+    String officeId = createOffice(adminToken, "Studio Platform", uniqueEmail("owner"));
+    String ownerToken = acceptAndLogin();
+
+    JsonNode roles = doGet("/api/v1/admin/roles", adminToken, 200);
+    String adminRoleId = roleId(roles, "ADMIN");
+
+    // Revoking a PLATFORM role through office management must be rejected.
+    doDelete(
+        "/api/v1/offices/" + officeId + "/members/" + ownerId(ownerToken) + "/roles/" + adminRoleId,
+        ownerToken,
+        409);
+    // Assigning a PLATFORM role through office management must be rejected.
+    doPatch(
+        "/api/v1/offices/" + officeId + "/members/" + ownerId(ownerToken) + "/role",
+        objectMapper.createObjectNode().put("roleId", adminRoleId).toString(),
+        ownerToken,
+        409);
+  }
+
+  @Test
+  void passwordChangeInvalidatesExistingAccessTokens() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    String token1 = login(adminEmail, "admin-pass-123");
+
+    doPost(
+        "/api/v1/auth/password/change",
+        objectMapper
+            .createObjectNode()
+            .put("currentPassword", "admin-pass-123")
+            .put("newPassword", "new-admin-pass-456")
+            .toString(),
+        token1,
+        204);
+
+    // The pre-change access token must no longer be accepted.
+    doGet("/api/v1/auth/me", token1, 403);
+
+    // The new password produces a valid token.
+    String token2 = login(adminEmail, "new-admin-pass-456");
+    doGet("/api/v1/auth/me", token2, 200);
+  }
+
+  @Test
+  void updateOfficeRejectsInvalidEmail() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    String adminToken = login(adminEmail, "admin-pass-123");
+    String officeId = createOffice(adminToken, "Studio Mail", uniqueEmail("owner"));
+    String ownerToken = acceptAndLogin();
+
+    doPatch(
+        "/api/v1/offices/" + officeId,
+        objectMapper.createObjectNode().put("email", "not-an-email").toString(),
+        ownerToken,
+        400);
+  }
+
+  @Test
+  void rlsRestrictsRuntimeRole() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    String adminToken = login(adminEmail, "admin-pass-123");
+    createOffice(adminToken, "Studio A", uniqueEmail("alpha"));
+    acceptAndLogin();
+    createOffice(adminToken, "Studio B", uniqueEmail("beta"));
+    acceptAndLogin();
+
+    // A fresh JDBC connection as app_user (the restricted runtime role) proves RLS is active.
+    try (Connection connection =
+        DriverManager.getConnection(POSTGRES.getJdbcUrl(), "app_user", "app_user")) {
+      // Not the owner: RLS applies and, with no context, nothing is visible.
+      try (PreparedStatement st = connection.prepareStatement("SELECT count(*) FROM offices");
+          ResultSet rs = st.executeQuery()) {
+        rs.next();
+        assertThat(rs.getInt(1)).isZero();
+      }
+      // With the admin context (SET LOCAL semantics) the rows become visible.
+      connection.setAutoCommit(false);
+      try (PreparedStatement st =
+          connection.prepareStatement("SELECT set_config('app.is_admin', 'true', true)")) {
+        st.execute();
+      }
+      try (PreparedStatement st = connection.prepareStatement("SELECT count(*) FROM offices");
+          ResultSet rs = st.executeQuery()) {
+        rs.next();
+        assertThat(rs.getInt(1)).isGreaterThanOrEqualTo(2);
+      }
+      connection.rollback();
+    }
+  }
+
+  @Test
+  void auditEventsRecordRequestMetadata() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    login(adminEmail, "admin-pass-123");
+
+    try (Connection connection =
+        DriverManager.getConnection(POSTGRES.getJdbcUrl(), "app_user", "app_user")) {
+      connection.setAutoCommit(false);
+      try (PreparedStatement st =
+          connection.prepareStatement("SELECT set_config('app.is_admin', 'true', true)")) {
+        st.execute();
+      }
+      try (PreparedStatement st =
+              connection.prepareStatement(
+                  "SELECT ip_address FROM audit_events WHERE action_type = 'LOGIN' ORDER BY occurred_at DESC LIMIT 1");
+          ResultSet rs = st.executeQuery()) {
+        assertThat(rs.next()).isTrue();
+        assertThat(rs.getString(1)).isNotBlank();
+      }
+      connection.rollback();
+    }
+  }
+
+  @Test
+  void refreshTokenRotationIsRaceSafe() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    LoginResponse first =
+        authService.login(new LoginRequest(adminEmail, "admin-pass-123"), "127.0.0.1");
+    String refresh = first.refreshToken();
+
+    int success = runConcurrently(() -> authService.refresh(new RefreshTokenRequest(refresh)));
+    assertThat(success).isEqualTo(1);
+  }
+
+  @Test
+  void invitationAcceptanceIsRaceSafe() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    String adminToken = login(adminEmail, "admin-pass-123");
+    createOffice(adminToken, "Studio Race", uniqueEmail("owner"));
+    String invitation = notificationPort.takeInvitationToken();
+
+    int success =
+        runConcurrently(
+            () ->
+                authService.acceptInvitation(
+                    new AcceptInvitationRequest(invitation, "R", "Race", "race-pass-123")));
+    assertThat(success).isEqualTo(1);
+  }
+
+  @Test
+  void passwordResetConfirmationIsRaceSafe() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    String adminToken = login(adminEmail, "admin-pass-123");
+    String ownerEmail = uniqueEmail("owner");
+    createOffice(adminToken, "Studio ResetRace", ownerEmail);
+    String invitation = notificationPort.takeInvitationToken();
+    authService.acceptInvitation(
+        new AcceptInvitationRequest(invitation, "N", "O", "owner-pass-123"));
+    authService.requestPasswordReset(
+        new com.sanitaslink.core.auth.dto.RequestPasswordResetRequest(ownerEmail));
+    String resetToken = notificationPort.takeResetToken();
+
+    int success =
+        runConcurrently(
+            () ->
+                authService.confirmPasswordReset(
+                    new ConfirmPasswordResetRequest(resetToken, "new-owner-pass-456")));
+    assertThat(success).isEqualTo(1);
+  }
+
+  @Test
+  void clinicalPermissionsAreEnforced() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+    String adminToken = login(adminEmail, "admin-pass-123");
+    String officeId = createOffice(adminToken, "Studio Clinica", uniqueEmail("owner"));
+    String ownerToken = acceptAndLogin();
+
+    // Titular registers a patient.
+    JsonNode created =
+        doPost(
+            "/api/v1/offices/" + officeId + "/patients",
+            objectMapper
+                .createObjectNode()
+                .put("firstName", "Mario")
+                .put("lastName", "Rossi")
+                .put("taxIdentifier", "RSSMRA80A01H501Z")
+                .toString(),
+            ownerToken,
+            201);
+    String patientId = created.get("id").asText();
+
+    // Titular writes and reads the clinical record.
+    doPatch(
+        "/api/v1/offices/" + officeId + "/patients/" + patientId + "/clinical",
+        objectMapper.createObjectNode().put("clinicalNotes", "Ipertensione").toString(),
+        ownerToken,
+        200);
+    JsonNode clinical =
+        doGet(
+            "/api/v1/offices/" + officeId + "/patients/" + patientId + "/clinical",
+            ownerToken,
+            200);
+    assertThat(clinical.get("clinicalNotes").asText()).isEqualTo("Ipertensione");
+
+    // Invite and activate a base secretary.
+    JsonNode roles = doGet("/api/v1/admin/roles", adminToken, 200);
+    String baseSecretaryRoleId = roleId(roles, "SEGRETARIA_BASE");
+    String secretaryEmail = uniqueEmail("secretary");
+    doPost(
+        "/api/v1/offices/" + officeId + "/invitations",
+        objectMapper
+            .createObjectNode()
+            .put("email", secretaryEmail)
+            .put("roleId", baseSecretaryRoleId)
+            .toString(),
+        ownerToken,
+        201);
+    String secretaryInvitation = notificationPort.takeInvitationToken();
+    JsonNode secretaryAccept =
+        doPost(
+            "/api/v1/auth/invitations/accept",
+            objectMapper
+                .createObjectNode()
+                .put("token", secretaryInvitation)
+                .put("firstName", "Sec")
+                .put("lastName", "Ret")
+                .put("password", "sec-pass-123")
+                .toString(),
+            null,
+            201);
+    String secretaryToken = secretaryAccept.get("accessToken").asText();
+
+    // The secretary can access the registry but NOT the clinical record.
+    doGet("/api/v1/offices/" + officeId + "/patients", secretaryToken, 200);
+    doGet(
+        "/api/v1/offices/" + officeId + "/patients/" + patientId + "/clinical",
+        secretaryToken,
+        403);
+  }
+
+  private int runConcurrently(Runnable action) throws Exception {
+    int threads = 4;
+    ExecutorService pool = Executors.newFixedThreadPool(threads);
+    CountDownLatch ready = new CountDownLatch(threads);
+    CountDownLatch start = new CountDownLatch(1);
+    AtomicInteger success = new AtomicInteger();
+    List<Future<?>> futures = new ArrayList<>();
+    for (int i = 0; i < threads; i++) {
+      futures.add(
+          pool.submit(
+              () -> {
+                ready.countDown();
+                try {
+                  start.await();
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                  return;
+                }
+                try {
+                  action.run();
+                  success.incrementAndGet();
+                } catch (Exception ignored) {
+                  // Expected for all but the winning thread.
+                }
+              }));
+    }
+    assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+    start.countDown();
+    for (Future<?> future : futures) {
+      try {
+        future.get(20, TimeUnit.SECONDS);
+      } catch (Exception ignored) {
+        // Ignore any assertion/other failures inside the worker threads.
+      }
+    }
+    pool.shutdownNow();
+    return success.get();
   }
 
   private String createOffice(String adminToken, String name, String ownerEmail) throws Exception {
@@ -434,7 +889,7 @@ class AuthAndOfficeIntegrationTest {
                 .put("ownerLastName", "Test")
                 .toString(),
             adminToken,
-            200);
+            201);
     return resp.get("id").asText();
   }
 
@@ -519,6 +974,14 @@ class AuthAndOfficeIntegrationTest {
   private JsonNode doPatch(String url, String body, String token, int expectedStatus)
       throws Exception {
     MockHttpServletRequestBuilder request = patch(url).contentType(APPLICATION_JSON).content(body);
+    if (token != null) {
+      request.header("Authorization", "Bearer " + token);
+    }
+    return doPerform(request, expectedStatus);
+  }
+
+  private JsonNode doPatch(String url, String token, int expectedStatus) throws Exception {
+    MockHttpServletRequestBuilder request = patch(url);
     if (token != null) {
       request.header("Authorization", "Bearer " + token);
     }
