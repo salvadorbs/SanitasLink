@@ -32,6 +32,10 @@ be impossible to rewrite or delete.
 ## Application-level guarantees
 
 - `AuditService` is the single entry point for writing events.
+- Sensitive **reads** are audited too: patient, appointment and prescription list/read operations
+  emit read audit events so bulk access to health data is visible in the trail.
+- Office-scoped operations record the **target office** explicitly (server-derived), so even a
+  platform admin acting on another office produces audit rows attributed to the affected office.
 - Request metadata (`ip_address`, `user_agent`, `correlation_id`) is captured from the current
   request and recorded on every event; a correlation id is generated when the client does not
   provide one.

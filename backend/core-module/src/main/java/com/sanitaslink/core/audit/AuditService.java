@@ -35,10 +35,27 @@ public class AuditService {
   public void record(
       String actionType, String resourceType, String resourceId, UUID patientId, String metadata) {
     TenantContext context = TenantContextHolder.get();
+    record(actionType, resourceType, resourceId, patientId, officeOf(context), metadata);
+  }
+
+  /**
+   * Records an event attributed to an explicit office. The office must be server-derived (the
+   * guarded resource office), never an untrusted client field, so that platform admins acting on
+   * another office produce audit rows with the correct target office.
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void record(
+      String actionType,
+      String resourceType,
+      String resourceId,
+      UUID patientId,
+      UUID officeId,
+      String metadata) {
+    TenantContext context = TenantContextHolder.get();
     RequestMetadata request = requestMetadata();
     AuditEvent event =
         AuditEvent.builder()
-            .officeId(context != null ? context.officeId() : null)
+            .officeId(officeId != null ? officeId : officeOf(context))
             .operatorId(context != null ? context.userId() : null)
             .actionType(actionType)
             .resourceType(resourceType)
@@ -58,7 +75,7 @@ public class AuditService {
     RequestMetadata request = requestMetadata();
     AuditEvent event =
         AuditEvent.builder()
-            .officeId(context != null ? context.officeId() : null)
+            .officeId(officeOf(context))
             .operatorId(operatorId)
             .actionType(actionType)
             .resourceType(resourceType)
@@ -68,6 +85,10 @@ public class AuditService {
             .correlationId(request.correlationId())
             .build();
     auditEventRepository.save(event);
+  }
+
+  private UUID officeOf(TenantContext context) {
+    return context != null ? context.officeId() : null;
   }
 
   private RequestMetadata requestMetadata() {

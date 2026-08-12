@@ -62,9 +62,10 @@ Before implementing or modifying anything, **read and follow the relevant guidan
 │   ├── AGENTS.md                      # Backend agent guidelines
 │   ├── pom.xml                        # Parent Maven POM
 │   ├── core-module/                   # Identity, Offices, Auth, RBAC, Audit, Tenancy
-│   ├── patient-module/                # Patient Demographics & Delegate profiles
+│   ├── patient-module/                # Patient Demographics & clinical records
 │   ├── appointment-module/            # Agenda, Slots, Booking Workflows
-│   └── prescription-module/           # Prescription Tickets & Approvals
+│   ├── prescription-module/           # Prescription Tickets & Approvals
+│   └── app-module/                    # Runnable Spring Boot bootstrap + integration tests
 ├── docs/                              # Technical documentation (English)
 ├── frontend/                          # React + Vite SPA
 │   ├── AGENTS.md                      # Frontend agent guidelines

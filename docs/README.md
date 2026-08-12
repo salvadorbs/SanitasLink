@@ -25,19 +25,21 @@ identity/office subsystem.
 
 ## Scope
 
-This release delivers the **backend** identity, office (tenant), authorization and invitation
-subsystem:
+This release delivers the **backend** identity, office (tenant), authorization, invitation and
+clinical subsystems. The runnable application is the `app-module`; the domain code lives in the
+`core`, `patient`, `appointment` and `prescription` modules:
 
 - users, offices and mono-office membership;
 - a fully mutable, database-managed role and permission catalog;
 - JWT authentication with rotated refresh tokens;
 - Admin-driven office provisioning and email invitations;
 - password reset and first-access password setup;
-- PostgreSQL Row-Level Security for tenant isolation;
-- immutable audit trail with request metadata;
-- encryption-at-rest for sensitive clinical fields;
-- clinical domain foundation: patient registry, appointments and prescriptions with granular
-  permissions and read/write audit;
+- PostgreSQL Row-Level Security for tenant isolation, including composite office-scoped clinical
+  foreign keys;
+- immutable audit trail with request metadata, including read auditing for sensitive lists;
+- encryption-at-rest (versioned AES-GCM) for sensitive clinical and personal fields;
+- clinical domain: patient registry, appointments with lifecycle transitions and prescriptions
+  with atomic issue/print flows, all with granular permissions and read/write audit;
 - RFC 7807 error responses.
 
 The frontend and the self-service practice-owner registration are intentionally out of scope and

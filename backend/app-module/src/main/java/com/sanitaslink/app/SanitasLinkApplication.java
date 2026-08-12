@@ -1,0 +1,16 @@
+package com.sanitaslink.app;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+
+@SpringBootApplication(scanBasePackages = "com.sanitaslink")
+@EntityScan(basePackages = "com.sanitaslink")
+@EnableJpaRepositories(basePackages = "com.sanitaslink")
+public class SanitasLinkApplication {
+
+  public static void main(String[] args) {
+    SpringApplication.run(SanitasLinkApplication.class, args);
+  }
+}

@@ -39,6 +39,7 @@
         <module>patient-module</module>
         <module>appointment-module</module>
         <module>prescription-module</module>
+        <module>app-module</module>
     </modules>
 
     <!-- 5. Dependency Management -->
