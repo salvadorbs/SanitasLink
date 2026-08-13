@@ -1,6 +1,7 @@
 package com.sanitaslink.core.audit;
 
 import com.sanitaslink.core.repository.AuditEventRepository;
+import com.sanitaslink.core.security.ClientIpResolver;
 import com.sanitaslink.core.tenant.TenantContext;
 import com.sanitaslink.core.tenant.TenantContextHolder;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,9 +22,12 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class AuditService {
 
   private final AuditEventRepository auditEventRepository;
+  private final ClientIpResolver clientIpResolver;
 
-  public AuditService(AuditEventRepository auditEventRepository) {
+  public AuditService(
+      AuditEventRepository auditEventRepository, ClientIpResolver clientIpResolver) {
     this.auditEventRepository = auditEventRepository;
+    this.clientIpResolver = clientIpResolver;
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
@@ -71,11 +75,23 @@ public class AuditService {
 
   @Transactional(propagation = Propagation.MANDATORY)
   public void recordAs(UUID operatorId, String actionType, String resourceType, String resourceId) {
+    recordAs(operatorId, null, actionType, resourceType, resourceId);
+  }
+
+  /**
+   * Records an event attributed to an explicit office, used by flows without an authenticated
+   * request context (login, refresh, logout, replay revocation) where the office is resolved
+   * server-side from the user's membership. The office must be server-derived, never a client
+   * field.
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void recordAs(
+      UUID operatorId, UUID officeId, String actionType, String resourceType, String resourceId) {
     TenantContext context = TenantContextHolder.get();
     RequestMetadata request = requestMetadata();
     AuditEvent event =
         AuditEvent.builder()
-            .officeId(officeOf(context))
+            .officeId(officeId != null ? officeId : officeOf(context))
             .operatorId(operatorId)
             .actionType(actionType)
             .resourceType(resourceType)
@@ -102,7 +118,7 @@ public class AuditService {
       correlationId = UUID.randomUUID().toString();
     }
     return new RequestMetadata(
-        request.getRemoteAddr(),
+        clientIpResolver.clientIp(request),
         truncate(request.getHeader("User-Agent"), 255),
         truncate(correlationId, 100));
   }

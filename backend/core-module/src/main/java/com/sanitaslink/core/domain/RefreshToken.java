@@ -29,15 +29,20 @@ public class RefreshToken {
   @Column(name = "replaced_by_token_hash", length = 64)
   private String replacedByTokenHash;
 
+  @Column(name = "session_family_id", nullable = false)
+  private UUID sessionFamilyId;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
-  public static RefreshToken create(UUID id, UUID userId, String tokenHash, Instant expiresAt) {
+  public static RefreshToken create(
+      UUID id, UUID userId, String tokenHash, Instant expiresAt, UUID sessionFamilyId) {
     RefreshToken token = new RefreshToken();
     token.id = id;
     token.userId = userId;
     token.tokenHash = tokenHash;
     token.expiresAt = expiresAt;
+    token.sessionFamilyId = sessionFamilyId;
     token.createdAt = Instant.now();
     return token;
   }
@@ -72,6 +77,10 @@ public class RefreshToken {
 
   public void setReplacedByTokenHash(String replacedByTokenHash) {
     this.replacedByTokenHash = replacedByTokenHash;
+  }
+
+  public UUID getSessionFamilyId() {
+    return sessionFamilyId;
   }
 
   public Instant getCreatedAt() {

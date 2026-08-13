@@ -48,7 +48,8 @@ import tools.jackson.databind.ObjectMapper;
   CorsProperties.class,
   LoginRateLimitProperties.class,
   NotificationProperties.class,
-  CryptoProperties.class
+  CryptoProperties.class,
+  RefreshCookieProperties.class
 })
 public class SecurityConfig {
 
@@ -116,7 +117,11 @@ public class SecurityConfig {
     CorsConfiguration configuration = new CorsConfiguration();
     configuration.setAllowedOrigins(properties.getAllowedOrigins());
     configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    configuration.setAllowedHeaders(List.of("*"));
+    // Explicit allowlist: credentials are enabled, so wildcard headers would break the browser
+    // contract and unnecessarily widen what preflight permits. X-Correlation-Id is consumed by the
+    // audit metadata (AuditService) and may be sent by browser clients.
+    configuration.setAllowedHeaders(
+        List.of("Authorization", "Content-Type", "Accept", "X-Correlation-Id"));
     configuration.setAllowCredentials(true);
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
     source.registerCorsConfiguration("/**", configuration);

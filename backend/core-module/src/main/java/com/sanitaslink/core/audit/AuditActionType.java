@@ -7,6 +7,7 @@ public final class AuditActionType {
   public static final String LOGIN_FAILED = "LOGIN_FAILED";
   public static final String LOGOUT = "LOGOUT";
   public static final String TOKEN_REFRESH = "TOKEN_REFRESH";
+  public static final String TOKEN_REUSE = "TOKEN_REUSE";
   public static final String PASSWORD_CHANGE = "PASSWORD_CHANGE";
   public static final String PASSWORD_RESET_REQUESTED = "PASSWORD_RESET_REQUESTED";
   public static final String PASSWORD_RESET_CONFIRMED = "PASSWORD_RESET_CONFIRMED";

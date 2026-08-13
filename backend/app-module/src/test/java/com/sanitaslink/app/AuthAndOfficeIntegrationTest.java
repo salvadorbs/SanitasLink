@@ -5,16 +5,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.sanitaslink.core.auth.AuthService;
 import com.sanitaslink.core.auth.dto.AcceptInvitationRequest;
 import com.sanitaslink.core.auth.dto.ConfirmPasswordResetRequest;
 import com.sanitaslink.core.auth.dto.LoginRequest;
-import com.sanitaslink.core.auth.dto.LoginResponse;
-import com.sanitaslink.core.auth.dto.RefreshTokenRequest;
 import com.sanitaslink.core.tenant.TenantContext;
 import com.sanitaslink.core.tenant.TenantContextHolder;
 import java.sql.Connection;
@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -44,6 +45,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.testcontainers.containers.PostgreSQLContainer;
 import tools.jackson.databind.JsonNode;
@@ -288,44 +290,170 @@ class AuthAndOfficeIntegrationTest {
     // Unauthenticated protected access returns 401.
     doGet("/api/v1/auth/me", null, 401);
 
-    // Refresh rotates the refresh token; logout revokes it.
-    JsonNode login =
-        doPost(
-            "/api/v1/auth/login",
-            objectMapper
-                .createObjectNode()
-                .put("email", adminEmail)
-                .put("password", "admin-pass-123")
-                .toString(),
-            null,
-            200);
-    String refresh1 = login.get("refreshToken").asText();
-    JsonNode refreshed =
-        doPost(
-            "/api/v1/auth/refresh",
-            objectMapper.createObjectNode().put("refreshToken", refresh1).toString(),
-            null,
-            200);
-    String refresh2 = refreshed.get("refreshToken").asText();
-    assertThat(refresh2).isNotEqualTo(refresh1);
+    // Refresh rotates the refresh token; logout revokes it. The raw refresh token only ever
+    // travels in the HttpOnly cookie and is never part of the JSON bodies.
+    String setCookie1 = loginAndTakeSetCookie(adminEmail, "admin-pass-123");
+    assertCookieAttributes(setCookie1);
+    String cookie1 = setCookieValue(setCookie1);
 
-    // Reusing the rotated token fails.
-    doPost(
-        "/api/v1/auth/refresh",
-        objectMapper.createObjectNode().put("refreshToken", refresh1).toString(),
-        null,
-        401);
+    MvcResult refreshResult = postWithCookie("/api/v1/auth/refresh", cookie1, 200);
+    MockHttpServletResponse refreshResponse = refreshResult.getResponse();
+    JsonNode refreshed = objectMapper.readTree(refreshResponse.getContentAsString());
+    assertThat(refreshed.has("accessToken")).isTrue();
+    assertThat(refreshed.has("refreshToken")).isFalse();
+    String setCookie2 = requireSetCookie(refreshResponse);
+    assertCookieAttributes(setCookie2);
+    String cookie2 = setCookieValue(setCookie2);
+    assertThat(cookie2).isNotEqualTo(cookie1);
 
-    doPost(
-        "/api/v1/auth/logout",
-        objectMapper.createObjectNode().put("refreshToken", refresh2).toString(),
-        null,
-        204);
-    doPost(
-        "/api/v1/auth/refresh",
-        objectMapper.createObjectNode().put("refreshToken", refresh2).toString(),
-        null,
-        401);
+    // Reusing the rotated token is rejected.
+    postWithCookie("/api/v1/auth/refresh", cookie1, 401);
+
+    // Logout revokes the current cookie and expires it.
+    MvcResult logoutResult = postWithCookie("/api/v1/auth/logout", cookie2, 204);
+    assertThat(requireSetCookie(logoutResult.getResponse())).contains("Max-Age=0");
+    postWithCookie("/api/v1/auth/refresh", cookie2, 401);
+  }
+
+  @Test
+  void cookieEndpointsRejectDisallowedOrigins() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    seeder.createAdmin(adminEmail, "admin-pass-123");
+
+    // Disallowed origins are rejected on every cookie-bearing endpoint. Without an Origin header
+    // (non-browser clients) the cookie endpoints stay usable.
+    MvcResult rejectedLogin =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/login")
+                    .header("Origin", "https://evil.example")
+                    .contentType(APPLICATION_JSON)
+                    .content(
+                        objectMapper
+                            .createObjectNode()
+                            .put("email", adminEmail)
+                            .put("password", "admin-pass-123")
+                            .toString()))
+            .andExpect(status().isForbidden())
+            .andReturn();
+    assertThat(rejectedLogin.getResponse().getContentAsString()).contains("Invalid CORS request");
+
+    String cookie = setCookieValue(loginAndTakeSetCookie(adminEmail, "admin-pass-123"));
+    String token = cookie.substring(cookie.indexOf('=') + 1);
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/logout")
+                .header("Origin", "https://evil.example")
+                .cookie(new org.springframework.mock.web.MockCookie("sl_refresh", token))
+                .header("Cookie", cookie))
+        .andExpect(status().isForbidden());
+
+    // The configured frontend origin is accepted (defense in depth next to SameSite).
+    MvcResult allowed =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/refresh")
+                    .header("Origin", "http://localhost:5173")
+                    .cookie(new org.springframework.mock.web.MockCookie("sl_refresh", token))
+                    .header("Cookie", cookie))
+            .andExpect(status().isOk())
+            .andReturn();
+    assertThat(requireSetCookie(allowed.getResponse())).contains("SameSite=Strict");
+
+    // Credentialed preflight from the allowed origin passes and echoes the origin.
+    mockMvc
+        .perform(
+            options("/api/v1/auth/refresh")
+                .header("Origin", "http://localhost:5173")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "X-Correlation-Id"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"))
+        .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+
+    // Missing Origin (curl, API clients, same-site navigations) is accepted.
+    MvcResult noOrigin =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/logout")
+                    .cookie(new org.springframework.mock.web.MockCookie("sl_refresh", token))
+                    .header("Cookie", cookie))
+            .andExpect(status().isNoContent())
+            .andReturn();
+    assertThat(requireSetCookie(noOrigin.getResponse())).contains("Max-Age=0");
+  }
+
+  @Test
+  void replayOfRotatedRefreshTokenRevokesTheSessionFamily() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    UUID userId = seeder.createAdmin(adminEmail, "admin-pass-123");
+    String cookie1 = setCookieValue(loginAndTakeSetCookie(adminEmail, "admin-pass-123"));
+    String cookie2 = setCookieValue(requireSetCookie(refreshWith(cookie1, 200).getResponse()));
+
+    // One login, one rotation: exactly one active token, one revoked predecessor linked to its
+    // replacement, all within a single session family. No orphan tokens are created.
+    assertTokenState(userId, 2, 1, 1, 1);
+
+    // Replaying the already-rotated first cookie is detected as token reuse.
+    postWithCookie("/api/v1/auth/refresh", cookie1, 401);
+
+    // The whole session family is revoked, so the valid second cookie is also dead, and the
+    // reuse was audited.
+    assertTokenState(userId, 2, 0, 2, 1);
+    postWithCookie("/api/v1/auth/refresh", cookie2, 401);
+    assertThat(auditEventCount("TOKEN_REUSE")).isGreaterThan(0);
+  }
+
+  @Test
+  void refreshRotatesWithinOneSessionFamilyOnly() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    UUID userId = seeder.createAdmin(adminEmail, "admin-pass-123");
+    String cookie1 = setCookieValue(loginAndTakeSetCookie(adminEmail, "admin-pass-123"));
+    assertTokenState(userId, 1, 1, 0, 1);
+
+    String cookie2 = setCookieValue(requireSetCookie(refreshWith(cookie1, 200).getResponse()));
+    assertTokenState(userId, 2, 1, 1, 1);
+
+    String cookie3 = setCookieValue(requireSetCookie(refreshWith(cookie2, 200).getResponse()));
+    assertTokenState(userId, 3, 1, 2, 1);
+
+    // The current token keeps rotating within the same family, and every rotated predecessor
+    // stays revoked and linked to its successor.
+    String cookie4 = setCookieValue(requireSetCookie(refreshWith(cookie3, 200).getResponse()));
+    assertTokenState(userId, 4, 1, 3, 1);
+
+    // Replaying any already-rotated token revokes the whole family, so the current token dies too.
+    postWithCookie("/api/v1/auth/refresh", cookie1, 401);
+    postWithCookie("/api/v1/auth/refresh", cookie2, 401);
+    postWithCookie("/api/v1/auth/refresh", cookie3, 401);
+    postWithCookie("/api/v1/auth/refresh", cookie4, 401);
+    assertTokenState(userId, 4, 0, 4, 1);
+  }
+
+  @Test
+  void replayDoesNotRevokeIndependentSessions() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    UUID userId = seeder.createAdmin(adminEmail, "admin-pass-123");
+
+    // Two independent logins (e.g. two devices) create two distinct session families.
+    String deviceA = setCookieValue(loginAndTakeSetCookie(adminEmail, "admin-pass-123"));
+    String deviceB = setCookieValue(loginAndTakeSetCookie(adminEmail, "admin-pass-123"));
+    assertTokenState(userId, 2, 2, 0, 2);
+
+    String deviceARotated =
+        setCookieValue(requireSetCookie(refreshWith(deviceA, 200).getResponse()));
+
+    // Replay on device A revokes only A's family.
+    postWithCookie("/api/v1/auth/refresh", deviceA, 401);
+    assertTokenState(userId, 3, 1, 2, 2);
+    postWithCookie("/api/v1/auth/refresh", deviceARotated, 401);
+
+    // Device B is untouched and still rotates normally.
+    String deviceBRotated =
+        setCookieValue(requireSetCookie(refreshWith(deviceB, 200).getResponse()));
+    assertTokenState(userId, 4, 1, 3, 2);
+    refreshWith(deviceBRotated, 200);
   }
 
   @Test
@@ -962,12 +1090,50 @@ class AuthAndOfficeIntegrationTest {
   void refreshTokenRotationIsRaceSafe() throws Exception {
     String adminEmail = uniqueEmail("admin");
     seeder.createAdmin(adminEmail, "admin-pass-123");
-    LoginResponse first =
+    AuthService.TokenPair first =
         authService.login(new LoginRequest(adminEmail, "admin-pass-123"), "127.0.0.1");
-    String refresh = first.refreshToken();
+    String refresh = first.rawRefreshToken();
 
-    int success = runConcurrently(() -> authService.refresh(new RefreshTokenRequest(refresh)));
+    int success = runConcurrently(() -> authService.refresh(refresh, "127.0.0.1"));
     assertThat(success).isEqualTo(1);
+  }
+
+  @Test
+  void concurrentRefreshLoserRevokesTheFamilyOnTakeover() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    UUID userId = seeder.createAdmin(adminEmail, "admin-pass-123");
+    AuthService.TokenPair first =
+        authService.login(new LoginRequest(adminEmail, "admin-pass-123"), "127.0.0.1");
+    String refresh = first.rawRefreshToken();
+
+    // Two concurrent rotations of the same raw credential: one wins, the loser detected that
+    // its credential was taken over by the winner's rotation.
+    int success = runConcurrently(() -> authService.refresh(refresh, "127.0.0.1"));
+    assertThat(success).isEqualTo(1);
+
+    // The taken-over clone is treated as replay: the whole session family is revoked, so no
+    // rotated successor remains usable, and the reuse was audited.
+    assertTokenState(userId, 2, 0, 2, 1);
+    assertThat(auditEventCount("TOKEN_REUSE")).isGreaterThan(0);
+  }
+
+  @Test
+  void expiredRotatedTokenReplayStillRevokesTheSessionFamily() throws Exception {
+    String adminEmail = uniqueEmail("admin");
+    UUID userId = seeder.createAdmin(adminEmail, "admin-pass-123");
+    String cookie1 = setCookieValue(loginAndTakeSetCookie(adminEmail, "admin-pass-123"));
+    String cookie2 = setCookieValue(requireSetCookie(refreshWith(cookie1, 200).getResponse()));
+    assertTokenState(userId, 2, 1, 1, 1);
+
+    // The already-rotated predecessor is expired in the database: expiry must never bypass the
+    // replay detection, otherwise an attacker replaying an old stolen hash after its TTL has
+    // passed would escape family revocation.
+    expireOldestRefreshToken(userId);
+    postWithCookie("/api/v1/auth/refresh", cookie1, 401);
+
+    assertTokenState(userId, 2, 0, 2, 1);
+    postWithCookie("/api/v1/auth/refresh", cookie2, 401);
+    assertThat(auditEventCount("TOKEN_REUSE")).isGreaterThan(0);
   }
 
   @Test
@@ -997,7 +1163,7 @@ class AuthAndOfficeIntegrationTest {
     authService.acceptInvitation(
         new AcceptInvitationRequest(invitation, "N", "O", "owner-pass-123"));
     authService.requestPasswordReset(
-        new com.sanitaslink.core.auth.dto.RequestPasswordResetRequest(ownerEmail));
+        new com.sanitaslink.core.auth.dto.RequestPasswordResetRequest(ownerEmail), "127.0.0.1");
     String resetToken = notificationPort.takeResetToken();
 
     int success =
@@ -1171,6 +1337,78 @@ class AuthAndOfficeIntegrationTest {
     return resp.get("accessToken").asText();
   }
 
+  /** Logs in and returns the raw Set-Cookie header carrying the HttpOnly refresh cookie. */
+  private String loginAndTakeSetCookie(String email, String password) throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/login")
+                    .contentType(APPLICATION_JSON)
+                    .content(
+                        objectMapper
+                            .createObjectNode()
+                            .put("email", email)
+                            .put("password", password)
+                            .toString()))
+            .andExpect(status().isOk())
+            .andReturn();
+    MockHttpServletResponse response = result.getResponse();
+    JsonNode body = objectMapper.readTree(response.getContentAsString());
+    assertThat(body.has("refreshToken")).isFalse();
+    assertThat(body.get("accessToken").asText()).isNotBlank();
+    return requireSetCookie(response);
+  }
+
+  private MvcResult postWithCookie(String url, String cookie, int expectedStatus) throws Exception {
+    MockHttpServletRequestBuilder request = post(url);
+    if (cookie != null) {
+      int eq = cookie.indexOf('=');
+      request
+          .cookie(
+              new org.springframework.mock.web.MockCookie(
+                  cookie.substring(0, eq), cookie.substring(eq + 1)))
+          .header("Cookie", cookie);
+    }
+    MvcResult result = mockMvc.perform(request).andReturn();
+    if (result.getResponse().getStatus() != expectedStatus) {
+      System.out.println(
+          "["
+              + url
+              + "] got "
+              + result.getResponse().getStatus()
+              + ": "
+              + result.getResponse().getContentAsString());
+    }
+    org.springframework.test.util.AssertionErrors.assertEquals(
+        "Response status", expectedStatus, result.getResponse().getStatus());
+    return result;
+  }
+
+  /** Refreshes with the given cookie and returns the raw response with its new Set-Cookie. */
+  private MvcResult refreshWith(String cookie, int expectedStatus) throws Exception {
+    return postWithCookie("/api/v1/auth/refresh", cookie, expectedStatus);
+  }
+
+  private String requireSetCookie(MockHttpServletResponse response) {
+    String setCookie = response.getHeader("Set-Cookie");
+    assertThat(setCookie).isNotBlank();
+    return setCookie;
+  }
+
+  /** Extracts the name=value pair from a Set-Cookie header, ready to be echoed back. */
+  private String setCookieValue(String setCookieHeader) {
+    return setCookieHeader.split(";")[0];
+  }
+
+  private void assertCookieAttributes(String setCookie) {
+    assertThat(setCookie).startsWith("sl_refresh=");
+    assertThat(setCookie).contains("Path=/api/v1/auth");
+    assertThat(setCookie).contains("SameSite=Strict");
+    assertThat(setCookie).contains("HttpOnly");
+    assertThat(setCookie).contains("Secure");
+    assertThat(setCookie).contains("Max-Age=604800");
+  }
+
   private java.util.List<String> rolesOf(JsonNode me) {
     java.util.List<String> roles = new java.util.ArrayList<>();
     me.get("roles").forEach(r -> roles.add(r.asText()));
@@ -1245,5 +1483,86 @@ class AuthAndOfficeIntegrationTest {
       return null;
     }
     return objectMapper.readTree(content);
+  }
+
+  /**
+   * Inspects the refresh-token rows of a user through a real {@code app_user} connection with the
+   * owning user's RLS context (the same context the application uses at runtime), verifying the
+   * exact token/revocation/replacement/family counts.
+   */
+  private void assertTokenState(UUID userId, int total, int active, int revoked, int families)
+      throws Exception {
+    try (Connection connection =
+        DriverManager.getConnection(POSTGRES.getJdbcUrl(), "app_user", "app_user")) {
+      connection.setAutoCommit(false);
+      try (PreparedStatement st =
+          connection.prepareStatement("SELECT set_config('app.current_user_id', ?, true)")) {
+        st.setString(1, userId.toString());
+        st.execute();
+      }
+      try (PreparedStatement st =
+          connection.prepareStatement(
+              "SELECT COUNT(*), COUNT(revoked_at), COUNT(DISTINCT session_family_id) "
+                  + "FROM refresh_tokens WHERE user_id = ?::uuid")) {
+        st.setString(1, userId.toString());
+        try (ResultSet rs = st.executeQuery()) {
+          assertThat(rs.next()).isTrue();
+          assertThat(rs.getInt(1)).as("total tokens").isEqualTo(total);
+          assertThat(rs.getInt(1) - rs.getInt(2)).as("active tokens").isEqualTo(active);
+          assertThat(rs.getInt(2)).as("revoked tokens").isEqualTo(revoked);
+          assertThat(rs.getInt(3)).as("session families").isEqualTo(families);
+        }
+      }
+      connection.rollback();
+    }
+  }
+
+  /**
+   * Expires the oldest refresh token of a user (the original login token) directly through an
+   * {@code app_user} connection in the owning user's RLS context, simulating the passage of time.
+   */
+  private void expireOldestRefreshToken(UUID userId) throws Exception {
+    try (Connection connection =
+        DriverManager.getConnection(POSTGRES.getJdbcUrl(), "app_user", "app_user")) {
+      connection.setAutoCommit(false);
+      try (PreparedStatement st =
+          connection.prepareStatement("SELECT set_config('app.current_user_id', ?, true)")) {
+        st.setString(1, userId.toString());
+        st.execute();
+      }
+      try (PreparedStatement st =
+          connection.prepareStatement(
+              "UPDATE refresh_tokens SET expires_at = TIMESTAMPTZ '2020-01-01 00:00:00Z' "
+                  + "WHERE user_id = ?::uuid AND expires_at = "
+                  + "(SELECT MIN(expires_at) FROM refresh_tokens WHERE user_id = ?::uuid)")) {
+        st.setString(1, userId.toString());
+        st.setString(2, userId.toString());
+        st.executeUpdate();
+      }
+      connection.commit();
+    }
+  }
+
+  /**
+   * Counts audit events through a real {@code app_user} connection in the admin RLS context: only
+   * platform admins (or events scoped to the caller's office) are readable, per {@code ae_select}.
+   */
+  private int auditEventCount(String actionType) throws Exception {
+    try (Connection connection =
+        DriverManager.getConnection(POSTGRES.getJdbcUrl(), "app_user", "app_user")) {
+      connection.setAutoCommit(false);
+      try (PreparedStatement st =
+          connection.prepareStatement("SELECT set_config('app.is_admin', 'true', true)")) {
+        st.execute();
+      }
+      try (PreparedStatement st =
+          connection.prepareStatement("SELECT COUNT(*) FROM audit_events WHERE action_type = ?")) {
+        st.setString(1, actionType);
+        try (ResultSet rs = st.executeQuery()) {
+          assertThat(rs.next()).isTrue();
+          return rs.getInt(1);
+        }
+      }
+    }
   }
 }

@@ -7,9 +7,7 @@ import com.sanitaslink.core.auth.dto.ChangePasswordRequest;
 import com.sanitaslink.core.auth.dto.ConfirmPasswordResetRequest;
 import com.sanitaslink.core.auth.dto.LoginRequest;
 import com.sanitaslink.core.auth.dto.LoginResponse;
-import com.sanitaslink.core.auth.dto.LogoutRequest;
 import com.sanitaslink.core.auth.dto.MeResponse;
-import com.sanitaslink.core.auth.dto.RefreshTokenRequest;
 import com.sanitaslink.core.auth.dto.RequestPasswordResetRequest;
 import com.sanitaslink.core.config.JwtProperties;
 import com.sanitaslink.core.config.TokenProperties;
@@ -46,6 +44,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** Authentication, token lifecycle, invitation acceptance and password management. */
 @Service
@@ -68,6 +68,8 @@ public class AuthService {
   private final TenantContextManager tenantContextManager;
   private final PermissionResolver permissionResolver;
   private final LoginRateLimiter loginRateLimiter;
+  private final SessionFamilyRevocationService sessionFamilyRevocationService;
+  private final SessionFamilyLocks sessionFamilyLocks;
 
   public AuthService(
       UserRepository userRepository,
@@ -84,7 +86,9 @@ public class AuthService {
       AuditService auditService,
       TenantContextManager tenantContextManager,
       PermissionResolver permissionResolver,
-      LoginRateLimiter loginRateLimiter) {
+      LoginRateLimiter loginRateLimiter,
+      SessionFamilyRevocationService sessionFamilyRevocationService,
+      SessionFamilyLocks sessionFamilyLocks) {
     this.userRepository = userRepository;
     this.refreshTokenRepository = refreshTokenRepository;
     this.passwordResetTokenRepository = passwordResetTokenRepository;
@@ -100,11 +104,19 @@ public class AuthService {
     this.tenantContextManager = tenantContextManager;
     this.permissionResolver = permissionResolver;
     this.loginRateLimiter = loginRateLimiter;
+    this.sessionFamilyRevocationService = sessionFamilyRevocationService;
+    this.sessionFamilyLocks = sessionFamilyLocks;
   }
 
+  /**
+   * Token pair returned by the service layer: the public access response and the raw refresh token
+   * that must travel only inside the HttpOnly cookie.
+   */
+  public record TokenPair(LoginResponse response, String rawRefreshToken) {}
+
   @Transactional
-  public LoginResponse login(LoginRequest request, String clientIp) {
-    String rateKey = clientIp;
+  public TokenPair login(LoginRequest request, String clientIp) {
+    String rateKey = "login:" + clientIp;
     if (!loginRateLimiter.isAllowed(rateKey)) {
       throw new ApiException(
           ErrorCodes.RATE_LIMITED, HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts");
@@ -145,19 +157,48 @@ public class AuthService {
     userRepository.save(user);
     loginRateLimiter.reset(rateKey);
 
-    LoginResponse response = issueTokenPair(user);
-    auditService.recordAs(user.getId(), AuditActionType.LOGIN, "USER", user.getId().toString());
-    return response;
+    TokenPair pair = issueTokenPair(user);
+    auditService.recordAs(
+        user.getId(),
+        activeOfficeIdOf(user.getId()),
+        AuditActionType.LOGIN,
+        "USER",
+        user.getId().toString());
+    return pair;
   }
 
+  /**
+   * Refresh with rotation and replay detection. Family revocation on replay runs in its own
+   * transaction ({@link SessionFamilyRevocationService}) so it survives the 401 response; the
+   * regular rotation path rolls back atomically.
+   */
   @Transactional
-  public LoginResponse refresh(RefreshTokenRequest request) {
-    String hash = TokenGenerator.sha256Hex(request.refreshToken());
+  public TokenPair refresh(String rawRefreshToken, String clientIp) {
+    if (!loginRateLimiter.isAllowed("refresh:" + clientIp)) {
+      throw new ApiException(
+          ErrorCodes.RATE_LIMITED, HttpStatus.TOO_MANY_REQUESTS, "Too many refresh attempts");
+    }
+    if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+      throw invalidRefreshToken();
+    }
+    String hash = TokenGenerator.sha256Hex(rawRefreshToken);
     // The raw refresh token is the bearer credential for this lookup.
     tenantContextManager.initializeWithToken(hash);
     RefreshToken token =
         refreshTokenRepository.findByTokenHash(hash).orElseThrow(this::invalidRefreshToken);
-    if (token.getRevokedAt() != null || token.getExpiresAt().isBefore(Instant.now())) {
+    // Revocation/replacement is checked BEFORE expiry: a stolen predecessor that was already
+    // rotated must trigger family revocation even after its own expiry has passed, otherwise an
+    // attacker could replay an old hash without consequence.
+    if (token.getRevokedAt() != null) {
+      if (token.getReplacedByTokenHash() != null) {
+        // Presenting a token that already rotated is replay: revoke the whole session family
+        // (all clones of the same login) in a committed transaction, then fail the request.
+        sessionFamilyRevocationService.revokeFamilyAndAudit(
+            token.getUserId(), token.getSessionFamilyId());
+      }
+      throw invalidRefreshToken();
+    }
+    if (token.getExpiresAt().isBefore(Instant.now())) {
       throw invalidRefreshToken();
     }
 
@@ -168,41 +209,81 @@ public class AuthService {
 
     tenantContextManager.initialize(null, user.getId(), false);
 
+    // Serialize rotation and family revocation on the same advisory lock (transaction-scoped, so
+    // it is released with this transaction): the claim, the replacement link and the insert of
+    // the successor must be atomic with respect to a concurrent family revocation, which can
+    // never interleave a committed sweep between them.
+    sessionFamilyLocks.lockFamily(token.getSessionFamilyId());
+
     // Atomic claim: only the caller that revokes the token first may rotate it.
     if (refreshTokenRepository.revokeIfActive(token.getId(), Instant.now()) == 0) {
+      // The scalar query reads the replacement marker from the database, not the stale entity
+      // cached in this transaction's persistence context.
+      if (refreshTokenRepository.findReplacedByTokenHash(token.getId()).isPresent()) {
+        // The token was simultaneously rotated by another caller: this presentation is the
+        // same raw credential being used twice, i.e. a taken-over clone. Revoke the family
+        // after this transaction rolls back (the advisory lock is released at rollback, which
+        // the independent revocation transaction can then acquire).
+        revokeFamilyAfterRollback(token.getUserId(), token.getSessionFamilyId());
+      }
       throw invalidRefreshToken();
     }
     String newRawRefresh = TokenGenerator.randomToken();
+    String newHash = TokenGenerator.sha256Hex(newRawRefresh);
+    // The rotated token keeps the same session family: every clone of this login chains here.
+    if (refreshTokenRepository.markReplacedBy(token.getId(), newHash) != 1) {
+      // The old token is not linked to the replacement, so a later reuse could not be detected
+      // as replay: fail and roll back the revocation instead of issuing an undetectable token.
+      throw invalidRefreshToken();
+    }
     refreshTokenRepository.save(
         RefreshToken.create(
             UUID.randomUUID(),
             user.getId(),
-            TokenGenerator.sha256Hex(newRawRefresh),
-            Instant.now().plus(jwtProperties.getRefreshTokenTtl())));
+            newHash,
+            Instant.now().plus(jwtProperties.getRefreshTokenTtl()),
+            token.getSessionFamilyId()));
 
-    LoginResponse response = issueTokenPair(user);
+    LoginResponse response = issueAccessToken(user);
     auditService.recordAs(
-        user.getId(), AuditActionType.TOKEN_REFRESH, "USER", user.getId().toString());
-    return new LoginResponse(
-        response.accessToken(), newRawRefresh, response.expiresInSeconds(), response.tokenType());
+        user.getId(),
+        activeOfficeIdOf(user.getId()),
+        AuditActionType.TOKEN_REFRESH,
+        "USER",
+        user.getId().toString());
+    return new TokenPair(response, newRawRefresh);
   }
 
   @Transactional
-  public void logout(LogoutRequest request) {
-    String hash = TokenGenerator.sha256Hex(request.refreshToken());
+  public void logout(String rawRefreshToken, String clientIp) {
+    if (!loginRateLimiter.isAllowed("logout:" + clientIp)) {
+      throw new ApiException(
+          ErrorCodes.RATE_LIMITED, HttpStatus.TOO_MANY_REQUESTS, "Too many logout attempts");
+    }
+    // An already-expired cookie revokes nothing; the response is still a 204.
+    if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+      return;
+    }
+    String hash = TokenGenerator.sha256Hex(rawRefreshToken);
     tenantContextManager.initializeWithToken(hash);
     refreshTokenRepository
         .findByTokenHash(hash)
         .ifPresent(
             token -> {
+              // Phase 1: self-read context so RLS lets the membership lookup see the user.
               tenantContextManager.initialize(null, token.getUserId(), false);
+              UUID officeId = activeOfficeIdOf(token.getUserId());
+              // Phase 2: full context for the token update and the audit insert.
+              tenantContextManager.initialize(officeId, token.getUserId(), false);
               token.setRevokedAt(Instant.now());
               refreshTokenRepository.save(token);
+              auditService.recordAs(
+                  token.getUserId(),
+                  officeId,
+                  AuditActionType.LOGOUT,
+                  "USER",
+                  token.getUserId().toString());
             });
-    TenantContext context = TenantContextHolder.get();
-    if (context != null) {
-      auditService.recordAs(context.userId(), AuditActionType.LOGOUT, "SESSION", hash);
-    }
   }
 
   public MeResponse me() {
@@ -223,7 +304,7 @@ public class AuthService {
   }
 
   @Transactional
-  public LoginResponse acceptInvitation(AcceptInvitationRequest request) {
+  public TokenPair acceptInvitation(AcceptInvitationRequest request) {
     String hash = TokenGenerator.sha256Hex(request.token());
 
     // RLS: the token itself is the bearer credential for this lookup.
@@ -306,7 +387,11 @@ public class AuthService {
   }
 
   @Transactional
-  public void requestPasswordReset(RequestPasswordResetRequest request) {
+  public void requestPasswordReset(RequestPasswordResetRequest request, String clientIp) {
+    if (!loginRateLimiter.isAllowed("password-reset:" + clientIp)) {
+      throw new ApiException(
+          ErrorCodes.RATE_LIMITED, HttpStatus.TOO_MANY_REQUESTS, "Too many reset requests");
+    }
     String email = User.normalizeEmail(request.email());
     User user = userRepository.findByEmail(email).orElse(null);
     if (user != null && UserStatus.ACTIVE.equals(user.getStatus())) {
@@ -403,7 +488,28 @@ public class AuthService {
         user.getId(), AuditActionType.PASSWORD_CHANGE, "USER", user.getId().toString());
   }
 
-  private LoginResponse issueTokenPair(User user) {
+  /**
+   * Issues a full token pair for a new login: access token plus a fresh family of refresh tokens.
+   */
+  private TokenPair issueTokenPair(User user) {
+    // Issue the access token first: permission resolution applies the user RLS context, which the
+    // refresh-token INSERT below needs to pass the rt_insert policy.
+    LoginResponse response = issueAccessToken(user);
+    String rawRefresh = TokenGenerator.randomToken();
+    refreshTokenRepository.save(
+        RefreshToken.create(
+            UUID.randomUUID(),
+            user.getId(),
+            TokenGenerator.sha256Hex(rawRefresh),
+            Instant.now().plus(jwtProperties.getRefreshTokenTtl()),
+            UUID.randomUUID()));
+    return new TokenPair(response, rawRefresh);
+  }
+
+  /**
+   * Issues only the access token: used during rotation, where the refresh token already rotated.
+   */
+  private LoginResponse issueAccessToken(User user) {
     PermissionResolver.Resolution resolution = permissionResolver.resolve(user.getId());
     AuthenticatedUser principal =
         new AuthenticatedUser(
@@ -415,15 +521,8 @@ public class AuthService {
             resolution.securityVersion());
     String accessToken =
         jwtTokenService.issueAccessToken(principal, resolution.roles(), resolution.permissions());
-    String rawRefresh = TokenGenerator.randomToken();
-    refreshTokenRepository.save(
-        RefreshToken.create(
-            UUID.randomUUID(),
-            user.getId(),
-            TokenGenerator.sha256Hex(rawRefresh),
-            Instant.now().plus(jwtProperties.getRefreshTokenTtl())));
     long expiresIn = jwtProperties.getAccessTokenTtl().toSeconds();
-    return new LoginResponse(accessToken, rawRefresh, expiresIn, "Bearer");
+    return new LoginResponse(accessToken, expiresIn, "Bearer");
   }
 
   private int incrementSecurityVersion(User user) {
@@ -449,5 +548,34 @@ public class AuthService {
   private ApiException invalidRefreshToken() {
     return new ApiException(
         ErrorCodes.INVALID_REFRESH_TOKEN, HttpStatus.UNAUTHORIZED, "Invalid refresh token");
+  }
+
+  /** Resolves the user's current active office (server-derived, never a client field). */
+  private UUID activeOfficeIdOf(UUID userId) {
+    return membershipRepository
+        .findByUserIdAndStatus(userId, MembershipStatus.ACTIVE)
+        .map(OfficeMembership::getOfficeId)
+        .orElse(null);
+  }
+
+  /**
+   * Defers the family revocation until the surrounding transaction has rolled back. The caller
+   * holds the family advisory lock inside the failed transaction; the revocation runs in its own
+   * committed transaction ({@link SessionFamilyRevocationService}), so it must wait for the lock to
+   * be released at rollback or the two transactions would deadlock.
+   */
+  private void revokeFamilyAfterRollback(UUID userId, UUID sessionFamilyId) {
+    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+      return;
+    }
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCompletion(int status) {
+            if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+              sessionFamilyRevocationService.revokeFamilyAndAudit(userId, sessionFamilyId);
+            }
+          }
+        });
   }
 }

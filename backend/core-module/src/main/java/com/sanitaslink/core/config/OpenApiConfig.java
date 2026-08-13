@@ -8,7 +8,11 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** OpenAPI definition with bearer-token security scheme. */
+/**
+ * OpenAPI definition with bearer-token and refresh-cookie security schemes. The cookie scheme is
+ * used by the auth endpoints that authenticate through the HttpOnly `sl_refresh` cookie (login,
+ * refresh, logout); every other endpoint requires the bearer JWT.
+ */
 @Configuration
 public class OpenApiConfig {
 
@@ -31,6 +35,17 @@ public class OpenApiConfig {
                     new SecurityScheme()
                         .type(SecurityScheme.Type.HTTP)
                         .scheme("bearer")
-                        .bearerFormat("JWT")));
+                        .bearerFormat("JWT"))
+                .addSecuritySchemes(
+                    "cookieAuth",
+                    new SecurityScheme()
+                        .type(SecurityScheme.Type.APIKEY)
+                        .in(SecurityScheme.In.COOKIE)
+                        .name("sl_refresh")
+                        .description(
+                            "HttpOnly refresh-token cookie scoped to /api/v1/auth. The raw "
+                                + "refresh token never appears in response bodies; it is rotated "
+                                + "on every refresh and issued/cleared through Set-Cookie. "
+                                + "Secure and SameSite=Strict outside the local dev profile.")));
   }
 }

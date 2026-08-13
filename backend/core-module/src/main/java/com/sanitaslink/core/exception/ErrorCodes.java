@@ -7,6 +7,7 @@ public final class ErrorCodes {
   public static final String ACCOUNT_DISABLED = "ACCOUNT_DISABLED";
   public static final String ACCOUNT_LOCKED = "ACCOUNT_LOCKED";
   public static final String RATE_LIMITED = "RATE_LIMITED";
+  public static final String CSRF_REJECTED = "CSRF_REJECTED";
   public static final String INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN";
   public static final String INVALID_INVITATION_TOKEN = "INVALID_INVITATION_TOKEN";
   public static final String INVITATION_EXPIRED = "INVITATION_EXPIRED";
