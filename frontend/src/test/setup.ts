@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 
 import { tokenStore } from '@/api/tokenStore';
 import { useAuthStore } from '@/features/auth/authStore';
+import i18n from '@/lib/i18n';
 import { queryClient } from '@/lib/queryClient';
 
 import { resetAuthJar } from './handlers';
@@ -33,7 +34,12 @@ Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
 });
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(async () => {
+  server.listen({ onUnhandledRequest: 'error' });
+  // Pin the test language to English (jsdom/Playwright default), keeping the UI assertions
+  // deterministic and independent of the host environment.
+  await i18n.changeLanguage('en');
+});
 
 afterEach(() => {
   server.resetHandlers();

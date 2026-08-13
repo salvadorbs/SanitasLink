@@ -32,12 +32,12 @@ describe('LoginPage', () => {
     server.use(http.post('*/api/v1/auth/refresh', () => new HttpResponse(null, { status: 401 })));
     const user = userEvent.setup();
     renderLogin();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Accedi' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled());
 
-    await user.click(screen.getByRole('button', { name: 'Accedi' }));
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    expect(screen.getByText('Inserisci la tua email.')).toBeInTheDocument();
-    expect(screen.getByText('Inserisci la tua password.')).toBeInTheDocument();
+    expect(screen.getByText('Enter your email.')).toBeInTheDocument();
+    expect(screen.getByText('Enter your password.')).toBeInTheDocument();
   });
 
   it('logs in, loads the profile and navigates to the protected area', async () => {
@@ -63,7 +63,7 @@ describe('LoginPage', () => {
 
     await user.type(screen.getByLabelText('Email'), 'medico@studio.example');
     await user.type(screen.getByLabelText('Password'), 'pass-123');
-    await user.click(screen.getByRole('button', { name: 'Accedi' }));
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => expect(screen.getByTestId('app-page')).toBeInTheDocument());
     expect(loginCalls).toBe(1);
@@ -81,10 +81,10 @@ describe('LoginPage', () => {
 
     await user.type(screen.getByLabelText('Email'), 'medico@studio.example');
     await user.type(screen.getByLabelText('Password'), 'wrong-pass');
-    await user.click(screen.getByRole('button', { name: 'Accedi' }));
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() =>
-      expect(screen.getByText('Credenziali non valide. Verifica i dati inseriti e riprova.')).toBeInTheDocument(),
+      expect(screen.getByText('Invalid credentials. Check the details and try again.')).toBeInTheDocument(),
     );
     expect(screen.queryByTestId('app-page')).not.toBeInTheDocument();
   });
@@ -95,7 +95,7 @@ describe('LoginPage', () => {
 
     expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'email');
     expect(screen.getByLabelText('Password')).toHaveAttribute('autocomplete', 'current-password');
-    expect(screen.getByRole('heading', { name: 'Accedi a SanitasLink' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in to SanitasLink' })).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'polite');
   });
 });

@@ -1,9 +1,11 @@
 import { Moon, Sun } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
 
 export function ThemeToggle() {
+  const { t } = useTranslation();
   const { theme, toggle } = useTheme();
 
   return (
@@ -11,7 +13,7 @@ export function ThemeToggle() {
       type="button"
       variant="ghost"
       size="icon"
-      aria-label={theme === 'dark' ? 'Attiva tema chiaro' : 'Attiva tema scuro'}
+      aria-label={theme === 'dark' ? t('common.themeToggleToLight') : t('common.themeToggleToDark')}
       onClick={toggle}
     >
       {theme === 'dark' ? (

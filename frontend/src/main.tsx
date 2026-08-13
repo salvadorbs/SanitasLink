@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 
 import { AuthProvider } from '@/features/auth/AuthProvider';
+import '@/lib/i18n';
 import { queryClient } from '@/lib/queryClient';
 import { applyTheme, resolveTheme } from '@/lib/theme';
 import { router } from '@/routes/router';

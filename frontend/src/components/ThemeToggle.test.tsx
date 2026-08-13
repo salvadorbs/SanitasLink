@@ -17,12 +17,12 @@ describe('ThemeToggle', () => {
 
     expect(document.documentElement.classList.contains('dark')).toBe(false);
 
-    await user.click(screen.getByRole('button', { name: 'Attiva tema scuro' }));
+    await user.click(screen.getByRole('button', { name: 'Switch to dark theme' }));
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('dark');
     expect(localStorage.getItem('sanitaslink.theme')).toBe('dark');
 
-    await user.click(screen.getByRole('button', { name: 'Attiva tema chiaro' }));
+    await user.click(screen.getByRole('button', { name: 'Switch to light theme' }));
     expect(document.documentElement.classList.contains('dark')).toBe(false);
     expect(localStorage.getItem('sanitaslink.theme')).toBe('light');
   });

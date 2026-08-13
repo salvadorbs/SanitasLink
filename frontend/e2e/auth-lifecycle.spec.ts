@@ -32,7 +32,7 @@ test.describe('auth session lifecycle (E2E)', () => {
     await page.getByLabel('Email').fill(USER_EMAIL);
     await page.getByLabel('Password').fill(USER_PASSWORD);
 
-    const cookies = await capturedCookieAttributes(page, () => page.getByRole('button', { name: 'Accedi' }).click());
+    const cookies = await capturedCookieAttributes(page, () => page.getByRole('button', { name: 'Sign in' }).click());
 
     const refreshAttributes = cookies;
     expect(
@@ -45,7 +45,7 @@ test.describe('auth session lifecycle (E2E)', () => {
     expect(refreshAttributes.some((a) => a === 'Secure' || a.startsWith('Secure='))).toBe(false);
 
     await expect(page).toHaveURL('/app');
-    await expect(page.getByRole('heading', { name: 'Il tuo profilo' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your profile' })).toBeVisible();
 
     expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({
       local: 0,
@@ -61,7 +61,7 @@ test.describe('auth session lifecycle (E2E)', () => {
     await page.goto('/login');
     await page.getByLabel('Email').fill(USER_EMAIL);
     await page.getByLabel('Password').fill(USER_PASSWORD);
-    await page.getByRole('button', { name: 'Accedi' }).click();
+    await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page).toHaveURL('/app');
 
     const refreshAttributes = await capturedCookieAttributes(page, () => page.reload());
@@ -71,7 +71,7 @@ test.describe('auth session lifecycle (E2E)', () => {
     ).toBe(true);
     expect(refreshAttributes).toContain('HttpOnly');
 
-    await expect(page.getByRole('heading', { name: 'Il tuo profilo' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your profile' })).toBeVisible();
     expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({
       local: 0,
       session: 0,
@@ -82,11 +82,11 @@ test.describe('auth session lifecycle (E2E)', () => {
     await page.goto('/login');
     await page.getByLabel('Email').fill(USER_EMAIL);
     await page.getByLabel('Password').fill(USER_PASSWORD);
-    await page.getByRole('button', { name: 'Accedi' }).click();
+    await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page).toHaveURL('/app');
 
     const refreshAttributes = await capturedCookieAttributes(page, () =>
-      page.getByRole('button', { name: 'Esci' }).click(),
+      page.getByRole('button', { name: 'Sign out' }).click(),
     );
     expect(
       refreshAttributes.some((a) => a.startsWith('sl_refresh=')),

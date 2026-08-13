@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -18,6 +19,7 @@ interface LoginFormValues {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const { status, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,7 +48,7 @@ export function LoginPage() {
       void navigate(isInternal ? pendingPath : '/app', { replace: true });
     } catch {
       // Uniform, non-enumerative error (invalid credentials, blocked account, rate limit).
-      setAuthError('Credenziali non valide. Verifica i dati inseriti e riprova.');
+      setAuthError(t('login.credentialsError'));
     }
   });
 
@@ -58,13 +60,13 @@ export function LoginPage() {
       <section className="w-full max-w-md">
         <Card>
           <CardHeader>
-            <h1 className="text-2xl font-semibold tracking-tight">Accedi a SanitasLink</h1>
-            <CardDescription>Inserisci le credenziali del tuo studio.</CardDescription>
+            <h1 className="text-2xl font-semibold tracking-tight">{t('login.title')}</h1>
+            <CardDescription>{t('login.subtitle')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('login.email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -73,10 +75,10 @@ export function LoginPage() {
                   aria-invalid={errors.email ? 'true' : undefined}
                   aria-describedby={errors.email ? 'email-error' : undefined}
                   {...register('email', {
-                    required: 'Inserisci la tua email.',
+                    required: t('login.emailRequired'),
                     pattern: {
                       value: EMAIL_PATTERN,
-                      message: 'Inserisci un indirizzo email valido.',
+                      message: t('login.emailInvalid'),
                     },
                   })}
                 />
@@ -88,14 +90,14 @@ export function LoginPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('login.password')}</Label>
                 <Input
                   id="password"
                   type="password"
                   autoComplete="current-password"
                   aria-invalid={errors.password ? 'true' : undefined}
                   aria-describedby={errors.password ? 'password-error' : undefined}
-                  {...register('password', { required: 'Inserisci la tua password.' })}
+                  {...register('password', { required: t('login.passwordRequired') })}
                 />
                 {errors.password && (
                   <p id="password-error" className="text-sm text-destructive" role="alert">
@@ -109,7 +111,7 @@ export function LoginPage() {
               </p>
 
               <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? 'Accesso in corso…' : 'Accedi'}
+                {isSubmitting ? t('login.submitting') : t('login.submit')}
               </Button>
             </form>
           </CardContent>

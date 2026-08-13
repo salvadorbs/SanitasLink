@@ -1,0 +1,31 @@
+{
+  "common": {
+    "loading": "Caricamento…",
+    "themeToggleToDark": "Attiva tema scuro",
+    "themeToggleToLight": "Attiva tema chiaro"
+  },
+  "login": {
+    "title": "Accedi a SanitasLink",
+    "subtitle": "Inserisci le tue credenziali.",
+    "email": "Email",
+    "password": "Password",
+    "emailRequired": "Inserisci la tua email.",
+    "emailInvalid": "Inserisci un indirizzo email valido.",
+    "passwordRequired": "Inserisci la tua password.",
+    "credentialsError": "Credenziali non valide. Verifica i dati inseriti e riprova.",
+    "submit": "Accedi",
+    "submitting": "Accesso in corso…"
+  },
+  "dashboard": {
+    "title": "Panoramica",
+    "profileHeading": "Il tuo profilo",
+    "logout": "Esci",
+    "name": "Nome",
+    "email": "Email",
+    "status": "Stato",
+    "officeId": "Office ID",
+    "roles": "Ruoli effettivi",
+    "permissions": "Permessi effettivi",
+    "profileUnavailable": "Profilo non disponibile."
+  }
+}

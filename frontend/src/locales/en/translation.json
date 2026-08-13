@@ -1,0 +1,31 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "themeToggleToDark": "Switch to dark theme",
+    "themeToggleToLight": "Switch to light theme"
+  },
+  "login": {
+    "title": "Sign in to SanitasLink",
+    "subtitle": "Enter your credentials.",
+    "email": "Email",
+    "password": "Password",
+    "emailRequired": "Enter your email.",
+    "emailInvalid": "Enter a valid email address.",
+    "passwordRequired": "Enter your password.",
+    "credentialsError": "Invalid credentials. Check the details and try again.",
+    "submit": "Sign in",
+    "submitting": "Signing in…"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "profileHeading": "Your profile",
+    "logout": "Sign out",
+    "name": "Name",
+    "email": "Email",
+    "status": "Status",
+    "officeId": "Office ID",
+    "roles": "Effective roles",
+    "permissions": "Effective permissions",
+    "profileUnavailable": "Profile unavailable."
+  }
+}
