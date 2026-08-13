@@ -26,9 +26,7 @@ import type { ChangePasswordRequest } from '../../models/changePasswordRequest';
 import type { ConfirmPasswordResetRequest } from '../../models/confirmPasswordResetRequest';
 import type { LoginRequest } from '../../models/loginRequest';
 import type { LoginResponse } from '../../models/loginResponse';
-import type { LogoutRequest } from '../../models/logoutRequest';
 import type { MeResponse } from '../../models/meResponse';
-import type { RefreshTokenRequest } from '../../models/refreshTokenRequest';
 import type { RequestPasswordResetRequest } from '../../models/requestPasswordResetRequest';
 import { mutator } from '../../mutator';
 
@@ -50,106 +48,47 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 };
 
 /**
+ * Reads the refresh token from the HttpOnly cookie (no request body). Authenticates through the refresh cookie: no bearer header is used.
  * @summary Rotate the refresh token and obtain a new access token
  */
-export const refresh = (
-  refreshTokenRequest: RefreshTokenRequest,
-  options?: SecondParameter<typeof mutator>,
-  signal?: AbortSignal,
-) => {
-  return mutator<LoginResponse>(
-    {
-      url: `/api/v1/auth/refresh`,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      data: refreshTokenRequest,
-      signal,
-    },
-    options,
-  );
+export const refresh = (options?: SecondParameter<typeof mutator>, signal?: AbortSignal) => {
+  return mutator<LoginResponse>({ url: `/api/v1/auth/refresh`, method: 'POST', signal }, options);
 };
 
-export const getRefreshQueryKey = (refreshTokenRequest?: RefreshTokenRequest) => {
-  return ['POST', 'api', 'v1', 'auth', 'refresh', refreshTokenRequest] as const;
+export const getRefreshMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof refresh>>, TError, void, TContext>;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<Awaited<ReturnType<typeof refresh>>, TError, void, TContext> => {
+  const mutationKey = ['refresh'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof refresh>>, void> = () => {
+    return refresh(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export const getRefreshQueryOptions = <TData = Awaited<ReturnType<typeof refresh>>, TError = unknown>(
-  refreshTokenRequest: RefreshTokenRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof refresh>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+export type RefreshMutationResult = NonNullable<Awaited<ReturnType<typeof refresh>>>;
 
-  const queryKey = queryOptions?.queryKey ?? getRefreshQueryKey(refreshTokenRequest);
+export type RefreshMutationError = unknown;
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof refresh>>> = ({ signal }) =>
-    refresh(refreshTokenRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof refresh>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
-};
-
-export type RefreshQueryResult = NonNullable<Awaited<ReturnType<typeof refresh>>>;
-export type RefreshQueryError = unknown;
-
-export function useRefresh<TData = Awaited<ReturnType<typeof refresh>>, TError = unknown>(
-  refreshTokenRequest: RefreshTokenRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof refresh>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<Awaited<ReturnType<typeof refresh>>, TError, Awaited<ReturnType<typeof refresh>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRefresh<TData = Awaited<ReturnType<typeof refresh>>, TError = unknown>(
-  refreshTokenRequest: RefreshTokenRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof refresh>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<Awaited<ReturnType<typeof refresh>>, TError, Awaited<ReturnType<typeof refresh>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRefresh<TData = Awaited<ReturnType<typeof refresh>>, TError = unknown>(
-  refreshTokenRequest: RefreshTokenRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof refresh>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Rotate the refresh token and obtain a new access token
  */
-
-export function useRefresh<TData = Awaited<ReturnType<typeof refresh>>, TError = unknown>(
-  refreshTokenRequest: RefreshTokenRequest,
+export const useRefresh = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof refresh>>, TError, TData>>;
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof refresh>>, TError, void, TContext>;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getRefreshQueryOptions(refreshTokenRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof refresh>>, TError, void, TContext> => {
+  return useMutation(getRefreshMutationOptions(options), queryClient);
+};
 /**
  * @summary Change the password of the authenticated user
  */
@@ -170,95 +109,59 @@ export const changePassword = (
   );
 };
 
-export const getChangePasswordQueryKey = (changePasswordRequest?: ChangePasswordRequest) => {
-  return ['POST', 'api', 'v1', 'auth', 'password', 'change', changePasswordRequest] as const;
-};
-
-export const getChangePasswordQueryOptions = <TData = Awaited<ReturnType<typeof changePassword>>, TError = unknown>(
-  changePasswordRequest: ChangePasswordRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof changePassword>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getChangePasswordQueryKey(changePasswordRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof changePassword>>> = ({ signal }) =>
-    changePassword(changePasswordRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+export const getChangePasswordMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof changePassword>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    { data: ChangePasswordRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof changePassword>>,
+  TError,
+  { data: ChangePasswordRequest },
+  TContext
+> => {
+  const mutationKey = ['changePassword'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof changePassword>>, { data: ChangePasswordRequest }> = (
+    props,
+  ) => {
+    const { data } = props ?? {};
+
+    return changePassword(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type ChangePasswordQueryResult = NonNullable<Awaited<ReturnType<typeof changePassword>>>;
-export type ChangePasswordQueryError = unknown;
+export type ChangePasswordMutationResult = NonNullable<Awaited<ReturnType<typeof changePassword>>>;
+export type ChangePasswordMutationBody = ChangePasswordRequest;
+export type ChangePasswordMutationError = unknown;
 
-export function useChangePassword<TData = Awaited<ReturnType<typeof changePassword>>, TError = unknown>(
-  changePasswordRequest: ChangePasswordRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof changePassword>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof changePassword>>,
-          TError,
-          Awaited<ReturnType<typeof changePassword>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useChangePassword<TData = Awaited<ReturnType<typeof changePassword>>, TError = unknown>(
-  changePasswordRequest: ChangePasswordRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof changePassword>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof changePassword>>,
-          TError,
-          Awaited<ReturnType<typeof changePassword>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useChangePassword<TData = Awaited<ReturnType<typeof changePassword>>, TError = unknown>(
-  changePasswordRequest: ChangePasswordRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof changePassword>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Change the password of the authenticated user
  */
-
-export function useChangePassword<TData = Awaited<ReturnType<typeof changePassword>>, TError = unknown>(
-  changePasswordRequest: ChangePasswordRequest,
+export const useChangePassword = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof changePassword>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof changePassword>>,
+      TError,
+      { data: ChangePasswordRequest },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getChangePasswordQueryOptions(changePasswordRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof changePassword>>, TError, { data: ChangePasswordRequest }, TContext> => {
+  return useMutation(getChangePasswordMutationOptions(options), queryClient);
+};
 /**
  * @summary Request a password reset (uniform response, no account enumeration)
  */
@@ -279,98 +182,65 @@ export const requestPasswordReset = (
   );
 };
 
-export const getRequestPasswordResetQueryKey = (requestPasswordResetRequest?: RequestPasswordResetRequest) => {
-  return ['POST', 'api', 'v1', 'auth', 'password-reset', 'request', requestPasswordResetRequest] as const;
-};
-
-export const getRequestPasswordResetQueryOptions = <
-  TData = Awaited<ReturnType<typeof requestPasswordReset>>,
-  TError = unknown,
->(
-  requestPasswordResetRequest: RequestPasswordResetRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getRequestPasswordResetQueryKey(requestPasswordResetRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof requestPasswordReset>>> = ({ signal }) =>
-    requestPasswordReset(requestPasswordResetRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+export const getRequestPasswordResetMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof requestPasswordReset>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    { data: RequestPasswordResetRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestPasswordReset>>,
+  TError,
+  { data: RequestPasswordResetRequest },
+  TContext
+> => {
+  const mutationKey = ['requestPasswordReset'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestPasswordReset>>,
+    { data: RequestPasswordResetRequest }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestPasswordReset(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type RequestPasswordResetQueryResult = NonNullable<Awaited<ReturnType<typeof requestPasswordReset>>>;
-export type RequestPasswordResetQueryError = unknown;
+export type RequestPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof requestPasswordReset>>>;
+export type RequestPasswordResetMutationBody = RequestPasswordResetRequest;
+export type RequestPasswordResetMutationError = unknown;
 
-export function useRequestPasswordReset<TData = Awaited<ReturnType<typeof requestPasswordReset>>, TError = unknown>(
-  requestPasswordResetRequest: RequestPasswordResetRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof requestPasswordReset>>,
-          TError,
-          Awaited<ReturnType<typeof requestPasswordReset>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRequestPasswordReset<TData = Awaited<ReturnType<typeof requestPasswordReset>>, TError = unknown>(
-  requestPasswordResetRequest: RequestPasswordResetRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof requestPasswordReset>>,
-          TError,
-          Awaited<ReturnType<typeof requestPasswordReset>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRequestPasswordReset<TData = Awaited<ReturnType<typeof requestPasswordReset>>, TError = unknown>(
-  requestPasswordResetRequest: RequestPasswordResetRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Request a password reset (uniform response, no account enumeration)
  */
-
-export function useRequestPasswordReset<TData = Awaited<ReturnType<typeof requestPasswordReset>>, TError = unknown>(
-  requestPasswordResetRequest: RequestPasswordResetRequest,
+export const useRequestPasswordReset = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof requestPasswordReset>>,
+      TError,
+      { data: RequestPasswordResetRequest },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getRequestPasswordResetQueryOptions(requestPasswordResetRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof requestPasswordReset>>,
+  TError,
+  { data: RequestPasswordResetRequest },
+  TContext
+> => {
+  return useMutation(getRequestPasswordResetMutationOptions(options), queryClient);
+};
 /**
  * @summary Confirm a password reset with the one-time token
  */
@@ -391,201 +261,110 @@ export const confirmPasswordReset = (
   );
 };
 
-export const getConfirmPasswordResetQueryKey = (confirmPasswordResetRequest?: ConfirmPasswordResetRequest) => {
-  return ['POST', 'api', 'v1', 'auth', 'password-reset', 'confirm', confirmPasswordResetRequest] as const;
-};
-
-export const getConfirmPasswordResetQueryOptions = <
-  TData = Awaited<ReturnType<typeof confirmPasswordReset>>,
-  TError = unknown,
->(
-  confirmPasswordResetRequest: ConfirmPasswordResetRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof confirmPasswordReset>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getConfirmPasswordResetQueryKey(confirmPasswordResetRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof confirmPasswordReset>>> = ({ signal }) =>
-    confirmPasswordReset(confirmPasswordResetRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+export const getConfirmPasswordResetMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof confirmPasswordReset>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    { data: ConfirmPasswordResetRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmPasswordReset>>,
+  TError,
+  { data: ConfirmPasswordResetRequest },
+  TContext
+> => {
+  const mutationKey = ['confirmPasswordReset'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmPasswordReset>>,
+    { data: ConfirmPasswordResetRequest }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return confirmPasswordReset(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type ConfirmPasswordResetQueryResult = NonNullable<Awaited<ReturnType<typeof confirmPasswordReset>>>;
-export type ConfirmPasswordResetQueryError = unknown;
+export type ConfirmPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof confirmPasswordReset>>>;
+export type ConfirmPasswordResetMutationBody = ConfirmPasswordResetRequest;
+export type ConfirmPasswordResetMutationError = unknown;
 
-export function useConfirmPasswordReset<TData = Awaited<ReturnType<typeof confirmPasswordReset>>, TError = unknown>(
-  confirmPasswordResetRequest: ConfirmPasswordResetRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof confirmPasswordReset>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof confirmPasswordReset>>,
-          TError,
-          Awaited<ReturnType<typeof confirmPasswordReset>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useConfirmPasswordReset<TData = Awaited<ReturnType<typeof confirmPasswordReset>>, TError = unknown>(
-  confirmPasswordResetRequest: ConfirmPasswordResetRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof confirmPasswordReset>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof confirmPasswordReset>>,
-          TError,
-          Awaited<ReturnType<typeof confirmPasswordReset>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useConfirmPasswordReset<TData = Awaited<ReturnType<typeof confirmPasswordReset>>, TError = unknown>(
-  confirmPasswordResetRequest: ConfirmPasswordResetRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof confirmPasswordReset>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Confirm a password reset with the one-time token
  */
-
-export function useConfirmPasswordReset<TData = Awaited<ReturnType<typeof confirmPasswordReset>>, TError = unknown>(
-  confirmPasswordResetRequest: ConfirmPasswordResetRequest,
+export const useConfirmPasswordReset = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof confirmPasswordReset>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof confirmPasswordReset>>,
+      TError,
+      { data: ConfirmPasswordResetRequest },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getConfirmPasswordResetQueryOptions(confirmPasswordResetRequest, options);
+): UseMutationResult<
+  Awaited<ReturnType<typeof confirmPasswordReset>>,
+  TError,
+  { data: ConfirmPasswordResetRequest },
+  TContext
+> => {
+  return useMutation(getConfirmPasswordResetMutationOptions(options), queryClient);
+};
+/**
+ * Reads the refresh token from the HttpOnly cookie (no request body) and expires it. Authenticates through the refresh cookie: no bearer header is used.
+ * @summary Revoke the refresh token from the HttpOnly cookie
+ */
+export const logout = (options?: SecondParameter<typeof mutator>, signal?: AbortSignal) => {
+  return mutator<void>({ url: `/api/v1/auth/logout`, method: 'POST', signal }, options);
+};
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+export const getLogoutMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext> => {
+  const mutationKey = ['logout'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
+    return logout(requestOptions);
   };
 
-  return withQueryKey(query, queryOptions.queryKey);
-}
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>;
+
+export type LogoutMutationError = unknown;
 
 /**
- * @summary Revoke the provided refresh token
+ * @summary Revoke the refresh token from the HttpOnly cookie
  */
-export const logout = (
-  logoutRequest: LogoutRequest,
-  options?: SecondParameter<typeof mutator>,
-  signal?: AbortSignal,
-) => {
-  return mutator<void>(
-    {
-      url: `/api/v1/auth/logout`,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      data: logoutRequest,
-      signal,
-    },
-    options,
-  );
-};
-
-export const getLogoutQueryKey = (logoutRequest?: LogoutRequest) => {
-  return ['POST', 'api', 'v1', 'auth', 'logout', logoutRequest] as const;
-};
-
-export const getLogoutQueryOptions = <TData = Awaited<ReturnType<typeof logout>>, TError = unknown>(
-  logoutRequest: LogoutRequest,
+export const useLogout = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof logout>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getLogoutQueryKey(logoutRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof logout>>> = ({ signal }) =>
-    logout(logoutRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof logout>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
-};
-
-export type LogoutQueryResult = NonNullable<Awaited<ReturnType<typeof logout>>>;
-export type LogoutQueryError = unknown;
-
-export function useLogout<TData = Awaited<ReturnType<typeof logout>>, TError = unknown>(
-  logoutRequest: LogoutRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof logout>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<Awaited<ReturnType<typeof logout>>, TError, Awaited<ReturnType<typeof logout>>>,
-        'initialData'
-      >;
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useLogout<TData = Awaited<ReturnType<typeof logout>>, TError = unknown>(
-  logoutRequest: LogoutRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof logout>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<Awaited<ReturnType<typeof logout>>, TError, Awaited<ReturnType<typeof logout>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useLogout<TData = Awaited<ReturnType<typeof logout>>, TError = unknown>(
-  logoutRequest: LogoutRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof logout>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+): UseMutationResult<Awaited<ReturnType<typeof logout>>, TError, void, TContext> => {
+  return useMutation(getLogoutMutationOptions(options), queryClient);
+};
 /**
- * @summary Revoke the provided refresh token
- */
-
-export function useLogout<TData = Awaited<ReturnType<typeof logout>>, TError = unknown>(
-  logoutRequest: LogoutRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof logout>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getLogoutQueryOptions(logoutRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-/**
- * @summary Login and obtain tokens
+ * Sets the refresh token in an HttpOnly cookie scoped to /api/v1/auth. Authenticates through the refresh cookie: the client must send credentials cookies (withCredentials) and no bearer header.
+ * @summary Login and obtain an access token
  */
 export const login = (loginRequest: LoginRequest, options?: SecondParameter<typeof mutator>, signal?: AbortSignal) => {
   return mutator<LoginResponse>(
@@ -600,85 +379,42 @@ export const login = (loginRequest: LoginRequest, options?: SecondParameter<type
   );
 };
 
-export const getLoginQueryKey = (loginRequest?: LoginRequest) => {
-  return ['POST', 'api', 'v1', 'auth', 'login', loginRequest] as const;
-};
+export const getLoginMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, { data: LoginRequest }, TContext>;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, { data: LoginRequest }, TContext> => {
+  const mutationKey = ['login'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getLoginQueryOptions = <TData = Awaited<ReturnType<typeof login>>, TError = unknown>(
-  loginRequest: LoginRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof login>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, { data: LoginRequest }> = (props) => {
+    const { data } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getLoginQueryKey(loginRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof login>>> = ({ signal }) =>
-    login(loginRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof login>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return login(data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type LoginQueryResult = NonNullable<Awaited<ReturnType<typeof login>>>;
-export type LoginQueryError = unknown;
+export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>;
+export type LoginMutationBody = LoginRequest;
+export type LoginMutationError = unknown;
 
-export function useLogin<TData = Awaited<ReturnType<typeof login>>, TError = unknown>(
-  loginRequest: LoginRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof login>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<Awaited<ReturnType<typeof login>>, TError, Awaited<ReturnType<typeof login>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useLogin<TData = Awaited<ReturnType<typeof login>>, TError = unknown>(
-  loginRequest: LoginRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof login>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<Awaited<ReturnType<typeof login>>, TError, Awaited<ReturnType<typeof login>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useLogin<TData = Awaited<ReturnType<typeof login>>, TError = unknown>(
-  loginRequest: LoginRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof login>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
- * @summary Login and obtain tokens
+ * @summary Login and obtain an access token
  */
-
-export function useLogin<TData = Awaited<ReturnType<typeof login>>, TError = unknown>(
-  loginRequest: LoginRequest,
+export const useLogin = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof login>>, TError, TData>>;
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, { data: LoginRequest }, TContext>;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getLoginQueryOptions(loginRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof login>>, TError, { data: LoginRequest }, TContext> => {
+  return useMutation(getLoginMutationOptions(options), queryClient);
+};
 /**
  * @summary Accept an office invitation and set the first-access password
  */
@@ -699,95 +435,65 @@ export const acceptInvitation = (
   );
 };
 
-export const getAcceptInvitationQueryKey = (acceptInvitationRequest?: AcceptInvitationRequest) => {
-  return ['POST', 'api', 'v1', 'auth', 'invitations', 'accept', acceptInvitationRequest] as const;
-};
-
-export const getAcceptInvitationQueryOptions = <TData = Awaited<ReturnType<typeof acceptInvitation>>, TError = unknown>(
-  acceptInvitationRequest: AcceptInvitationRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getAcceptInvitationQueryKey(acceptInvitationRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof acceptInvitation>>> = ({ signal }) =>
-    acceptInvitation(acceptInvitationRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+export const getAcceptInvitationMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof acceptInvitation>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    { data: AcceptInvitationRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof acceptInvitation>>,
+  TError,
+  { data: AcceptInvitationRequest },
+  TContext
+> => {
+  const mutationKey = ['acceptInvitation'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof acceptInvitation>>,
+    { data: AcceptInvitationRequest }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return acceptInvitation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type AcceptInvitationQueryResult = NonNullable<Awaited<ReturnType<typeof acceptInvitation>>>;
-export type AcceptInvitationQueryError = unknown;
+export type AcceptInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof acceptInvitation>>>;
+export type AcceptInvitationMutationBody = AcceptInvitationRequest;
+export type AcceptInvitationMutationError = unknown;
 
-export function useAcceptInvitation<TData = Awaited<ReturnType<typeof acceptInvitation>>, TError = unknown>(
-  acceptInvitationRequest: AcceptInvitationRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof acceptInvitation>>,
-          TError,
-          Awaited<ReturnType<typeof acceptInvitation>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useAcceptInvitation<TData = Awaited<ReturnType<typeof acceptInvitation>>, TError = unknown>(
-  acceptInvitationRequest: AcceptInvitationRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof acceptInvitation>>,
-          TError,
-          Awaited<ReturnType<typeof acceptInvitation>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useAcceptInvitation<TData = Awaited<ReturnType<typeof acceptInvitation>>, TError = unknown>(
-  acceptInvitationRequest: AcceptInvitationRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Accept an office invitation and set the first-access password
  */
-
-export function useAcceptInvitation<TData = Awaited<ReturnType<typeof acceptInvitation>>, TError = unknown>(
-  acceptInvitationRequest: AcceptInvitationRequest,
+export const useAcceptInvitation = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof acceptInvitation>>,
+      TError,
+      { data: AcceptInvitationRequest },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getAcceptInvitationQueryOptions(acceptInvitationRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof acceptInvitation>>,
+  TError,
+  { data: AcceptInvitationRequest },
+  TContext
+> => {
+  return useMutation(getAcceptInvitationMutationOptions(options), queryClient);
+};
 /**
  * @summary Current user profile with effective roles and permissions
  */
@@ -795,37 +501,73 @@ export const me = (options?: SecondParameter<typeof mutator>, signal?: AbortSign
   return mutator<MeResponse>({ url: `/api/v1/auth/me`, method: 'GET', signal }, options);
 };
 
-export const getMeMutationOptions = <TError = unknown, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof me>>, TError, void, TContext>;
-  request?: SecondParameter<typeof mutator>;
-}): UseMutationOptions<Awaited<ReturnType<typeof me>>, TError, void, TContext> => {
-  const mutationKey = ['me'];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof me>>, void> = () => {
-    return me(requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
+export const getMeQueryKey = () => {
+  return ['api', 'v1', 'auth', 'me'] as const;
 };
 
-export type MeMutationResult = NonNullable<Awaited<ReturnType<typeof me>>>;
+export const getMeQueryOptions = <TData = Awaited<ReturnType<typeof me>>, TError = unknown>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof me>>, TError, TData>>;
+  request?: SecondParameter<typeof mutator>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
 
-export type MeMutationError = unknown;
+  const queryKey = queryOptions?.queryKey ?? getMeQueryKey();
 
-/**
- * @summary Current user profile with effective roles and permissions
- */
-export const useMe = <TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof me>>, TError, void, TContext>;
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof me>>> = ({ signal }) => me(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof me>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type MeQueryResult = NonNullable<Awaited<ReturnType<typeof me>>>;
+export type MeQueryError = unknown;
+
+export function useMe<TData = Awaited<ReturnType<typeof me>>, TError = unknown>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof me>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<Awaited<ReturnType<typeof me>>, TError, Awaited<ReturnType<typeof me>>>,
+        'initialData'
+      >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof me>>, TError, void, TContext> => {
-  return useMutation(getMeMutationOptions(options), queryClient);
-};
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useMe<TData = Awaited<ReturnType<typeof me>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof me>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<Awaited<ReturnType<typeof me>>, TError, Awaited<ReturnType<typeof me>>>,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useMe<TData = Awaited<ReturnType<typeof me>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof me>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Current user profile with effective roles and permissions
+ */
+
+export function useMe<TData = Awaited<ReturnType<typeof me>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof me>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getMeQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}

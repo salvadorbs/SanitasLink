@@ -1,3 +1,14 @@
+import '@testing-library/jest-dom/vitest';
+import { cleanup } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll } from 'vitest';
+
+import { tokenStore } from '@/api/tokenStore';
+import { useAuthStore } from '@/features/auth/authStore';
+import { queryClient } from '@/lib/queryClient';
+
+import { resetAuthJar } from './handlers';
+import { server } from './server';
+
 const storage = new Map<string, string>();
 
 const localStorageShim: Storage = {
@@ -21,3 +32,16 @@ Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageShim,
   configurable: true,
 });
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+
+afterEach(() => {
+  server.resetHandlers();
+  tokenStore.clear();
+  resetAuthJar();
+  useAuthStore.setState({ status: 'loading', profile: null });
+  queryClient.clear();
+  cleanup();
+});
+
+afterAll(() => server.close());

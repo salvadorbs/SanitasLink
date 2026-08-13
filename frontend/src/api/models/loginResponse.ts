@@ -8,7 +8,6 @@
 
 export interface LoginResponse {
   accessToken?: string;
-  refreshToken?: string;
   expiresInSeconds?: number;
   tokenType?: string;
 }

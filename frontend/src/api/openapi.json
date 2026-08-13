@@ -331,17 +331,13 @@
       "post": {
         "tags": ["Authentication"],
         "summary": "Rotate the refresh token and obtain a new access token",
+        "description": "Reads the refresh token from the HttpOnly cookie (no request body). Authenticates through the refresh cookie: no bearer header is used.",
         "operationId": "refresh",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefreshTokenRequest"
-              }
-            }
-          },
-          "required": true
-        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -425,21 +421,17 @@
     "/api/v1/auth/logout": {
       "post": {
         "tags": ["Authentication"],
-        "summary": "Revoke the provided refresh token",
+        "summary": "Revoke the refresh token from the HttpOnly cookie",
+        "description": "Reads the refresh token from the HttpOnly cookie (no request body) and expires it. Authenticates through the refresh cookie: no bearer header is used.",
         "operationId": "logout",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LogoutRequest"
-              }
-            }
-          },
-          "required": true
-        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           }
         }
       }
@@ -447,7 +439,8 @@
     "/api/v1/auth/login": {
       "post": {
         "tags": ["Authentication"],
-        "summary": "Login and obtain tokens",
+        "summary": "Login and obtain an access token",
+        "description": "Sets the refresh token in an HttpOnly cookie scoped to /api/v1/auth. Authenticates through the refresh cookie: the client must send credentials cookies (withCredentials) and no bearer header.",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -459,6 +452,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1569,23 +1567,10 @@
           }
         }
       },
-      "RefreshTokenRequest": {
-        "type": "object",
-        "properties": {
-          "refreshToken": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["refreshToken"]
-      },
       "LoginResponse": {
         "type": "object",
         "properties": {
           "accessToken": {
-            "type": "string"
-          },
-          "refreshToken": {
             "type": "string"
           },
           "expiresInSeconds": {
@@ -1637,16 +1622,6 @@
           }
         },
         "required": ["newPassword", "token"]
-      },
-      "LogoutRequest": {
-        "type": "object",
-        "properties": {
-          "refreshToken": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["refreshToken"]
       },
       "LoginRequest": {
         "type": "object",
@@ -2048,6 +2023,12 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      },
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sl_refresh",
+        "description": "HttpOnly refresh-token cookie scoped to /api/v1/auth. The raw refresh token never appears in response bodies; it is rotated on every refresh and issued/cleared through Set-Cookie. Secure and SameSite=Strict outside the local dev profile."
       }
     }
   }

@@ -20,9 +20,10 @@ export default defineConfig({
           name: 'mutator',
         },
         query: {
-          useQuery: true,
-          useInfinite: true,
-          useMutation: true,
+          // Defaults are correct: GET operations become useQuery hooks, non-GET become
+          // useMutation. Overriding useQuery/useMutation globally would force the same hook
+          // kind for every verb.
+          useInfinite: false,
           shouldSplitQueryKey: true,
         },
       },

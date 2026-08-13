@@ -52,42 +52,90 @@ export const list = (officeId: string, options?: SecondParameter<typeof mutator>
   );
 };
 
-export const getListMutationOptions = <TError = unknown, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof list>>, TError, { officeId: string }, TContext>;
-  request?: SecondParameter<typeof mutator>;
-}): UseMutationOptions<Awaited<ReturnType<typeof list>>, TError, { officeId: string }, TContext> => {
-  const mutationKey = ['list'];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof list>>, { officeId: string }> = (props) => {
-    const { officeId } = props ?? {};
-
-    return list(officeId, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
+export const getListQueryKey = (officeId: string) => {
+  return ['api', 'v1', 'offices', officeId, 'prescriptions'] as const;
 };
 
-export type ListMutationResult = NonNullable<Awaited<ReturnType<typeof list>>>;
-
-export type ListMutationError = unknown;
-
-/**
- * @summary List prescriptions of the office
- */
-export const useList = <TError = unknown, TContext = unknown>(
+export const getListQueryOptions = <TData = Awaited<ReturnType<typeof list>>, TError = unknown>(
+  officeId: string,
   options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof list>>, TError, { officeId: string }, TContext>;
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof list>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListQueryKey(officeId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof list>>> = ({ signal }) =>
+    list(officeId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: officeId !== null && officeId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof list>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type ListQueryResult = NonNullable<Awaited<ReturnType<typeof list>>>;
+export type ListQueryError = unknown;
+
+export function useList<TData = Awaited<ReturnType<typeof list>>, TError = unknown>(
+  officeId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof list>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<Awaited<ReturnType<typeof list>>, TError, Awaited<ReturnType<typeof list>>>,
+        'initialData'
+      >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof list>>, TError, { officeId: string }, TContext> => {
-  return useMutation(getListMutationOptions(options), queryClient);
-};
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useList<TData = Awaited<ReturnType<typeof list>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof list>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<Awaited<ReturnType<typeof list>>, TError, Awaited<ReturnType<typeof list>>>,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useList<TData = Awaited<ReturnType<typeof list>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof list>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List prescriptions of the office
+ */
+
+export function useList<TData = Awaited<ReturnType<typeof list>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof list>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListQueryOptions(officeId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary Create a prescription request
  */
@@ -109,95 +157,65 @@ export const request = (
   );
 };
 
-export const getRequestQueryKey = (officeId: string, requestPrescriptionRequest?: RequestPrescriptionRequest) => {
-  return ['POST', 'api', 'v1', 'offices', officeId, 'prescriptions', requestPrescriptionRequest] as const;
-};
+export const getRequestMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof request>>,
+    TError,
+    { officeId: string; data: RequestPrescriptionRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof request>>,
+  TError,
+  { officeId: string; data: RequestPrescriptionRequest },
+  TContext
+> => {
+  const mutationKey = ['request'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getRequestQueryOptions = <TData = Awaited<ReturnType<typeof request>>, TError = unknown>(
-  officeId: string,
-  requestPrescriptionRequest: RequestPrescriptionRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof request>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof request>>,
+    { officeId: string; data: RequestPrescriptionRequest }
+  > = (props) => {
+    const { officeId, data } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getRequestQueryKey(officeId, requestPrescriptionRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof request>>> = ({ signal }) =>
-    request(officeId, requestPrescriptionRequest, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: officeId !== null && officeId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof request>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return request(officeId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type RequestQueryResult = NonNullable<Awaited<ReturnType<typeof request>>>;
-export type RequestQueryError = unknown;
+export type RequestMutationResult = NonNullable<Awaited<ReturnType<typeof request>>>;
+export type RequestMutationBody = RequestPrescriptionRequest;
+export type RequestMutationError = unknown;
 
-export function useRequest<TData = Awaited<ReturnType<typeof request>>, TError = unknown>(
-  officeId: string,
-  requestPrescriptionRequest: RequestPrescriptionRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof request>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<Awaited<ReturnType<typeof request>>, TError, Awaited<ReturnType<typeof request>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRequest<TData = Awaited<ReturnType<typeof request>>, TError = unknown>(
-  officeId: string,
-  requestPrescriptionRequest: RequestPrescriptionRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof request>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<Awaited<ReturnType<typeof request>>, TError, Awaited<ReturnType<typeof request>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRequest<TData = Awaited<ReturnType<typeof request>>, TError = unknown>(
-  officeId: string,
-  requestPrescriptionRequest: RequestPrescriptionRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof request>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Create a prescription request
  */
-
-export function useRequest<TData = Awaited<ReturnType<typeof request>>, TError = unknown>(
-  officeId: string,
-  requestPrescriptionRequest: RequestPrescriptionRequest,
+export const useRequest = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof request>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof request>>,
+      TError,
+      { officeId: string; data: RequestPrescriptionRequest },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getRequestQueryOptions(officeId, requestPrescriptionRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof request>>,
+  TError,
+  { officeId: string; data: RequestPrescriptionRequest },
+  TContext
+> => {
+  return useMutation(getRequestMutationOptions(options), queryClient);
+};
 /**
  * @summary Print / send a prescription
  */
@@ -213,95 +231,65 @@ export const print = (
   );
 };
 
-export const getPrintQueryKey = (officeId: string, prescriptionId: string) => {
-  return ['PATCH', 'api', 'v1', 'offices', officeId, 'prescriptions', prescriptionId, 'print'] as const;
-};
+export const getPrintMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof print>>,
+    TError,
+    { officeId: string; prescriptionId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof print>>,
+  TError,
+  { officeId: string; prescriptionId: string },
+  TContext
+> => {
+  const mutationKey = ['print'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getPrintQueryOptions = <TData = Awaited<ReturnType<typeof print>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof print>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof print>>,
+    { officeId: string; prescriptionId: string }
+  > = (props) => {
+    const { officeId, prescriptionId } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getPrintQueryKey(officeId, prescriptionId);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof print>>> = ({ signal }) =>
-    print(officeId, prescriptionId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: officeId !== null && officeId !== undefined && prescriptionId !== null && prescriptionId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof print>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return print(officeId, prescriptionId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PrintQueryResult = NonNullable<Awaited<ReturnType<typeof print>>>;
-export type PrintQueryError = unknown;
+export type PrintMutationResult = NonNullable<Awaited<ReturnType<typeof print>>>;
 
-export function usePrint<TData = Awaited<ReturnType<typeof print>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof print>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<Awaited<ReturnType<typeof print>>, TError, Awaited<ReturnType<typeof print>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePrint<TData = Awaited<ReturnType<typeof print>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof print>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<Awaited<ReturnType<typeof print>>, TError, Awaited<ReturnType<typeof print>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePrint<TData = Awaited<ReturnType<typeof print>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof print>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PrintMutationError = unknown;
+
 /**
  * @summary Print / send a prescription
  */
-
-export function usePrint<TData = Awaited<ReturnType<typeof print>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
+export const usePrint = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof print>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof print>>,
+      TError,
+      { officeId: string; prescriptionId: string },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPrintQueryOptions(officeId, prescriptionId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof print>>,
+  TError,
+  { officeId: string; prescriptionId: string },
+  TContext
+> => {
+  return useMutation(getPrintMutationOptions(options), queryClient);
+};
 /**
  * @summary Issue (sign) a prescription request
  */
@@ -317,91 +305,62 @@ export const issue = (
   );
 };
 
-export const getIssueQueryKey = (officeId: string, prescriptionId: string) => {
-  return ['PATCH', 'api', 'v1', 'offices', officeId, 'prescriptions', prescriptionId, 'issue'] as const;
-};
+export const getIssueMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof issue>>,
+    TError,
+    { officeId: string; prescriptionId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof issue>>,
+  TError,
+  { officeId: string; prescriptionId: string },
+  TContext
+> => {
+  const mutationKey = ['issue'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getIssueQueryOptions = <TData = Awaited<ReturnType<typeof issue>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof issue>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof issue>>,
+    { officeId: string; prescriptionId: string }
+  > = (props) => {
+    const { officeId, prescriptionId } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getIssueQueryKey(officeId, prescriptionId);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof issue>>> = ({ signal }) =>
-    issue(officeId, prescriptionId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: officeId !== null && officeId !== undefined && prescriptionId !== null && prescriptionId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof issue>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return issue(officeId, prescriptionId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type IssueQueryResult = NonNullable<Awaited<ReturnType<typeof issue>>>;
-export type IssueQueryError = unknown;
+export type IssueMutationResult = NonNullable<Awaited<ReturnType<typeof issue>>>;
 
-export function useIssue<TData = Awaited<ReturnType<typeof issue>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof issue>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<Awaited<ReturnType<typeof issue>>, TError, Awaited<ReturnType<typeof issue>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useIssue<TData = Awaited<ReturnType<typeof issue>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof issue>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<Awaited<ReturnType<typeof issue>>, TError, Awaited<ReturnType<typeof issue>>>,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useIssue<TData = Awaited<ReturnType<typeof issue>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof issue>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type IssueMutationError = unknown;
+
 /**
  * @summary Issue (sign) a prescription request
  */
-
-export function useIssue<TData = Awaited<ReturnType<typeof issue>>, TError = unknown>(
-  officeId: string,
-  prescriptionId: string,
+export const useIssue = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof issue>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof issue>>,
+      TError,
+      { officeId: string; prescriptionId: string },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getIssueQueryOptions(officeId, prescriptionId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof issue>>,
+  TError,
+  { officeId: string; prescriptionId: string },
+  TContext
+> => {
+  return useMutation(getIssueMutationOptions(options), queryClient);
+};

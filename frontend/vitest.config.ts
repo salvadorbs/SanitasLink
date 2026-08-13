@@ -1,8 +1,19 @@
+import { URL, fileURLToPath } from 'node:url';
+
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   test: {
-    environment: 'node',
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
     setupFiles: ['./src/test/setup.ts'],
+    environmentOptions: {
+      jsdom: { url: 'http://localhost:5173' },
+    },
   },
 });

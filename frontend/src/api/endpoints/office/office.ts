@@ -56,42 +56,98 @@ export const listInvitations = (officeId: string, options?: SecondParameter<type
   );
 };
 
-export const getListInvitationsMutationOptions = <TError = unknown, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof listInvitations>>, TError, { officeId: string }, TContext>;
-  request?: SecondParameter<typeof mutator>;
-}): UseMutationOptions<Awaited<ReturnType<typeof listInvitations>>, TError, { officeId: string }, TContext> => {
-  const mutationKey = ['listInvitations'];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof listInvitations>>, { officeId: string }> = (props) => {
-    const { officeId } = props ?? {};
-
-    return listInvitations(officeId, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
+export const getListInvitationsQueryKey = (officeId: string) => {
+  return ['api', 'v1', 'offices', officeId, 'invitations'] as const;
 };
 
-export type ListInvitationsMutationResult = NonNullable<Awaited<ReturnType<typeof listInvitations>>>;
-
-export type ListInvitationsMutationError = unknown;
-
-/**
- * @summary List office invitations
- */
-export const useListInvitations = <TError = unknown, TContext = unknown>(
+export const getListInvitationsQueryOptions = <TData = Awaited<ReturnType<typeof listInvitations>>, TError = unknown>(
+  officeId: string,
   options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof listInvitations>>, TError, { officeId: string }, TContext>;
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvitations>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListInvitationsQueryKey(officeId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvitations>>> = ({ signal }) =>
+    listInvitations(officeId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: officeId !== null && officeId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof listInvitations>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type ListInvitationsQueryResult = NonNullable<Awaited<ReturnType<typeof listInvitations>>>;
+export type ListInvitationsQueryError = unknown;
+
+export function useListInvitations<TData = Awaited<ReturnType<typeof listInvitations>>, TError = unknown>(
+  officeId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvitations>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listInvitations>>,
+          TError,
+          Awaited<ReturnType<typeof listInvitations>>
+        >,
+        'initialData'
+      >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof listInvitations>>, TError, { officeId: string }, TContext> => {
-  return useMutation(getListInvitationsMutationOptions(options), queryClient);
-};
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListInvitations<TData = Awaited<ReturnType<typeof listInvitations>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvitations>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listInvitations>>,
+          TError,
+          Awaited<ReturnType<typeof listInvitations>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListInvitations<TData = Awaited<ReturnType<typeof listInvitations>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvitations>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List office invitations
+ */
+
+export function useListInvitations<TData = Awaited<ReturnType<typeof listInvitations>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvitations>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListInvitationsQueryOptions(officeId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary Invite a collaborator to the office
  */
@@ -113,65 +169,124 @@ export const inviteMember = (
   );
 };
 
-export const getInviteMemberQueryKey = (officeId: string, inviteMemberRequest?: InviteMemberRequest) => {
-  return ['POST', 'api', 'v1', 'offices', officeId, 'invitations', inviteMemberRequest] as const;
+export const getInviteMemberMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inviteMember>>,
+    TError,
+    { officeId: string; data: InviteMemberRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof inviteMember>>,
+  TError,
+  { officeId: string; data: InviteMemberRequest },
+  TContext
+> => {
+  const mutationKey = ['inviteMember'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof inviteMember>>,
+    { officeId: string; data: InviteMemberRequest }
+  > = (props) => {
+    const { officeId, data } = props ?? {};
+
+    return inviteMember(officeId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export const getInviteMemberQueryOptions = <TData = Awaited<ReturnType<typeof inviteMember>>, TError = unknown>(
-  officeId: string,
-  inviteMemberRequest: InviteMemberRequest,
+export type InviteMemberMutationResult = NonNullable<Awaited<ReturnType<typeof inviteMember>>>;
+export type InviteMemberMutationBody = InviteMemberRequest;
+export type InviteMemberMutationError = unknown;
+
+/**
+ * @summary Invite a collaborator to the office
+ */
+export const useInviteMember = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof inviteMember>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof inviteMember>>,
+      TError,
+      { officeId: string; data: InviteMemberRequest },
+      TContext
+    >;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof inviteMember>>,
+  TError,
+  { officeId: string; data: InviteMemberRequest },
+  TContext
+> => {
+  return useMutation(getInviteMemberMutationOptions(options), queryClient);
+};
+/**
+ * @summary View office information
+ */
+export const getOffice = (officeId: string, options?: SecondParameter<typeof mutator>, signal?: AbortSignal) => {
+  return mutator<OfficeResponse>({ url: `/api/v1/offices/${officeId}`, method: 'GET', signal }, options);
+};
+
+export const getGetOfficeQueryKey = (officeId: string) => {
+  return ['api', 'v1', 'offices', officeId] as const;
+};
+
+export const getGetOfficeQueryOptions = <TData = Awaited<ReturnType<typeof getOffice>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getOffice>>, TError, TData>>;
     request?: SecondParameter<typeof mutator>;
   },
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getInviteMemberQueryKey(officeId, inviteMemberRequest);
+  const queryKey = queryOptions?.queryKey ?? getGetOfficeQueryKey(officeId);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof inviteMember>>> = ({ signal }) =>
-    inviteMember(officeId, inviteMemberRequest, requestOptions, signal);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getOffice>>> = ({ signal }) =>
+    getOffice(officeId, requestOptions, signal);
 
   return {
     queryKey,
     queryFn,
     enabled: officeId !== null && officeId !== undefined,
     ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof inviteMember>>, TError, TData> & {
+  } as UseQueryOptions<Awaited<ReturnType<typeof getOffice>>, TError, TData> & {
     queryKey: DataTag<QueryKey, TData, TError>;
   };
 };
 
-export type InviteMemberQueryResult = NonNullable<Awaited<ReturnType<typeof inviteMember>>>;
-export type InviteMemberQueryError = unknown;
+export type GetOfficeQueryResult = NonNullable<Awaited<ReturnType<typeof getOffice>>>;
+export type GetOfficeQueryError = unknown;
 
-export function useInviteMember<TData = Awaited<ReturnType<typeof inviteMember>>, TError = unknown>(
+export function useGetOffice<TData = Awaited<ReturnType<typeof getOffice>>, TError = unknown>(
   officeId: string,
-  inviteMemberRequest: InviteMemberRequest,
   options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof inviteMember>>, TError, TData>> &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getOffice>>, TError, TData>> &
       Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof inviteMember>>,
-          TError,
-          Awaited<ReturnType<typeof inviteMember>>
-        >,
+        DefinedInitialDataOptions<Awaited<ReturnType<typeof getOffice>>, TError, Awaited<ReturnType<typeof getOffice>>>,
         'initialData'
       >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useInviteMember<TData = Awaited<ReturnType<typeof inviteMember>>, TError = unknown>(
+export function useGetOffice<TData = Awaited<ReturnType<typeof getOffice>>, TError = unknown>(
   officeId: string,
-  inviteMemberRequest: InviteMemberRequest,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof inviteMember>>, TError, TData>> &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getOffice>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof inviteMember>>,
+          Awaited<ReturnType<typeof getOffice>>,
           TError,
-          Awaited<ReturnType<typeof inviteMember>>
+          Awaited<ReturnType<typeof getOffice>>
         >,
         'initialData'
       >;
@@ -179,29 +294,27 @@ export function useInviteMember<TData = Awaited<ReturnType<typeof inviteMember>>
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useInviteMember<TData = Awaited<ReturnType<typeof inviteMember>>, TError = unknown>(
+export function useGetOffice<TData = Awaited<ReturnType<typeof getOffice>>, TError = unknown>(
   officeId: string,
-  inviteMemberRequest: InviteMemberRequest,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof inviteMember>>, TError, TData>>;
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getOffice>>, TError, TData>>;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
- * @summary Invite a collaborator to the office
+ * @summary View office information
  */
 
-export function useInviteMember<TData = Awaited<ReturnType<typeof inviteMember>>, TError = unknown>(
+export function useGetOffice<TData = Awaited<ReturnType<typeof getOffice>>, TError = unknown>(
   officeId: string,
-  inviteMemberRequest: InviteMemberRequest,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof inviteMember>>, TError, TData>>;
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getOffice>>, TError, TData>>;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getInviteMemberQueryOptions(officeId, inviteMemberRequest, options);
+  const queryOptions = getGetOfficeQueryOptions(officeId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
@@ -210,49 +323,6 @@ export function useInviteMember<TData = Awaited<ReturnType<typeof inviteMember>>
   return withQueryKey(query, queryOptions.queryKey);
 }
 
-/**
- * @summary View office information
- */
-export const getOffice = (officeId: string, options?: SecondParameter<typeof mutator>, signal?: AbortSignal) => {
-  return mutator<OfficeResponse>({ url: `/api/v1/offices/${officeId}`, method: 'GET', signal }, options);
-};
-
-export const getGetOfficeMutationOptions = <TError = unknown, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof getOffice>>, TError, { officeId: string }, TContext>;
-  request?: SecondParameter<typeof mutator>;
-}): UseMutationOptions<Awaited<ReturnType<typeof getOffice>>, TError, { officeId: string }, TContext> => {
-  const mutationKey = ['getOffice'];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof getOffice>>, { officeId: string }> = (props) => {
-    const { officeId } = props ?? {};
-
-    return getOffice(officeId, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type GetOfficeMutationResult = NonNullable<Awaited<ReturnType<typeof getOffice>>>;
-
-export type GetOfficeMutationError = unknown;
-
-/**
- * @summary View office information
- */
-export const useGetOffice = <TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof getOffice>>, TError, { officeId: string }, TContext>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof getOffice>>, TError, { officeId: string }, TContext> => {
-  return useMutation(getGetOfficeMutationOptions(options), queryClient);
-};
 /**
  * @summary Update office information
  */
@@ -274,103 +344,65 @@ export const updateOffice = (
   );
 };
 
-export const getUpdateOfficeQueryKey = (officeId: string, updateOfficeRequest?: UpdateOfficeRequest) => {
-  return ['PATCH', 'api', 'v1', 'offices', officeId, updateOfficeRequest] as const;
-};
+export const getUpdateOfficeMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateOffice>>,
+    TError,
+    { officeId: string; data: UpdateOfficeRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateOffice>>,
+  TError,
+  { officeId: string; data: UpdateOfficeRequest },
+  TContext
+> => {
+  const mutationKey = ['updateOffice'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getUpdateOfficeQueryOptions = <TData = Awaited<ReturnType<typeof updateOffice>>, TError = unknown>(
-  officeId: string,
-  updateOfficeRequest: UpdateOfficeRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof updateOffice>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateOffice>>,
+    { officeId: string; data: UpdateOfficeRequest }
+  > = (props) => {
+    const { officeId, data } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getUpdateOfficeQueryKey(officeId, updateOfficeRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof updateOffice>>> = ({ signal }) =>
-    updateOffice(officeId, updateOfficeRequest, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: officeId !== null && officeId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof updateOffice>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return updateOffice(officeId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type UpdateOfficeQueryResult = NonNullable<Awaited<ReturnType<typeof updateOffice>>>;
-export type UpdateOfficeQueryError = unknown;
+export type UpdateOfficeMutationResult = NonNullable<Awaited<ReturnType<typeof updateOffice>>>;
+export type UpdateOfficeMutationBody = UpdateOfficeRequest;
+export type UpdateOfficeMutationError = unknown;
 
-export function useUpdateOffice<TData = Awaited<ReturnType<typeof updateOffice>>, TError = unknown>(
-  officeId: string,
-  updateOfficeRequest: UpdateOfficeRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof updateOffice>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof updateOffice>>,
-          TError,
-          Awaited<ReturnType<typeof updateOffice>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useUpdateOffice<TData = Awaited<ReturnType<typeof updateOffice>>, TError = unknown>(
-  officeId: string,
-  updateOfficeRequest: UpdateOfficeRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof updateOffice>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof updateOffice>>,
-          TError,
-          Awaited<ReturnType<typeof updateOffice>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useUpdateOffice<TData = Awaited<ReturnType<typeof updateOffice>>, TError = unknown>(
-  officeId: string,
-  updateOfficeRequest: UpdateOfficeRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof updateOffice>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update office information
  */
-
-export function useUpdateOffice<TData = Awaited<ReturnType<typeof updateOffice>>, TError = unknown>(
-  officeId: string,
-  updateOfficeRequest: UpdateOfficeRequest,
+export const useUpdateOffice = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof updateOffice>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateOffice>>,
+      TError,
+      { officeId: string; data: UpdateOfficeRequest },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getUpdateOfficeQueryOptions(officeId, updateOfficeRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateOffice>>,
+  TError,
+  { officeId: string; data: UpdateOfficeRequest },
+  TContext
+> => {
+  return useMutation(getUpdateOfficeMutationOptions(options), queryClient);
+};
 /**
  * @summary Assign an office role to a member
  */
@@ -393,108 +425,65 @@ export const assignRole = (
   );
 };
 
-export const getAssignRoleQueryKey = (officeId: string, userId: string, assignRoleRequest?: AssignRoleRequest) => {
-  return ['PATCH', 'api', 'v1', 'offices', officeId, 'members', userId, 'role', assignRoleRequest] as const;
-};
+export const getAssignRoleMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof assignRole>>,
+    TError,
+    { officeId: string; userId: string; data: AssignRoleRequest },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof assignRole>>,
+  TError,
+  { officeId: string; userId: string; data: AssignRoleRequest },
+  TContext
+> => {
+  const mutationKey = ['assignRole'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getAssignRoleQueryOptions = <TData = Awaited<ReturnType<typeof assignRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  assignRoleRequest: AssignRoleRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof assignRole>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof assignRole>>,
+    { officeId: string; userId: string; data: AssignRoleRequest }
+  > = (props) => {
+    const { officeId, userId, data } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getAssignRoleQueryKey(officeId, userId, assignRoleRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof assignRole>>> = ({ signal }) =>
-    assignRole(officeId, userId, assignRoleRequest, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: officeId !== null && officeId !== undefined && userId !== null && userId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof assignRole>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return assignRole(officeId, userId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type AssignRoleQueryResult = NonNullable<Awaited<ReturnType<typeof assignRole>>>;
-export type AssignRoleQueryError = unknown;
+export type AssignRoleMutationResult = NonNullable<Awaited<ReturnType<typeof assignRole>>>;
+export type AssignRoleMutationBody = AssignRoleRequest;
+export type AssignRoleMutationError = unknown;
 
-export function useAssignRole<TData = Awaited<ReturnType<typeof assignRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  assignRoleRequest: AssignRoleRequest,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof assignRole>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof assignRole>>,
-          TError,
-          Awaited<ReturnType<typeof assignRole>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useAssignRole<TData = Awaited<ReturnType<typeof assignRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  assignRoleRequest: AssignRoleRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof assignRole>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof assignRole>>,
-          TError,
-          Awaited<ReturnType<typeof assignRole>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useAssignRole<TData = Awaited<ReturnType<typeof assignRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  assignRoleRequest: AssignRoleRequest,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof assignRole>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Assign an office role to a member
  */
-
-export function useAssignRole<TData = Awaited<ReturnType<typeof assignRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  assignRoleRequest: AssignRoleRequest,
+export const useAssignRole = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof assignRole>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof assignRole>>,
+      TError,
+      { officeId: string; userId: string; data: AssignRoleRequest },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getAssignRoleQueryOptions(officeId, userId, assignRoleRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof assignRole>>,
+  TError,
+  { officeId: string; userId: string; data: AssignRoleRequest },
+  TContext
+> => {
+  return useMutation(getAssignRoleMutationOptions(options), queryClient);
+};
 /**
  * @summary List office members
  */
@@ -505,42 +494,98 @@ export const listMembers1 = (officeId: string, options?: SecondParameter<typeof 
   );
 };
 
-export const getListMembers1MutationOptions = <TError = unknown, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof listMembers1>>, TError, { officeId: string }, TContext>;
-  request?: SecondParameter<typeof mutator>;
-}): UseMutationOptions<Awaited<ReturnType<typeof listMembers1>>, TError, { officeId: string }, TContext> => {
-  const mutationKey = ['listMembers1'];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof listMembers1>>, { officeId: string }> = (props) => {
-    const { officeId } = props ?? {};
-
-    return listMembers1(officeId, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
+export const getListMembers1QueryKey = (officeId: string) => {
+  return ['api', 'v1', 'offices', officeId, 'members'] as const;
 };
 
-export type ListMembers1MutationResult = NonNullable<Awaited<ReturnType<typeof listMembers1>>>;
-
-export type ListMembers1MutationError = unknown;
-
-/**
- * @summary List office members
- */
-export const useListMembers1 = <TError = unknown, TContext = unknown>(
+export const getListMembers1QueryOptions = <TData = Awaited<ReturnType<typeof listMembers1>>, TError = unknown>(
+  officeId: string,
   options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof listMembers1>>, TError, { officeId: string }, TContext>;
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMembers1>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMembers1QueryKey(officeId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listMembers1>>> = ({ signal }) =>
+    listMembers1(officeId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: officeId !== null && officeId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof listMembers1>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type ListMembers1QueryResult = NonNullable<Awaited<ReturnType<typeof listMembers1>>>;
+export type ListMembers1QueryError = unknown;
+
+export function useListMembers1<TData = Awaited<ReturnType<typeof listMembers1>>, TError = unknown>(
+  officeId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMembers1>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMembers1>>,
+          TError,
+          Awaited<ReturnType<typeof listMembers1>>
+        >,
+        'initialData'
+      >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof listMembers1>>, TError, { officeId: string }, TContext> => {
-  return useMutation(getListMembers1MutationOptions(options), queryClient);
-};
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListMembers1<TData = Awaited<ReturnType<typeof listMembers1>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMembers1>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMembers1>>,
+          TError,
+          Awaited<ReturnType<typeof listMembers1>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListMembers1<TData = Awaited<ReturnType<typeof listMembers1>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMembers1>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List office members
+ */
+
+export function useListMembers1<TData = Awaited<ReturnType<typeof listMembers1>>, TError = unknown>(
+  officeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMembers1>>, TError, TData>>;
+    request?: SecondParameter<typeof mutator>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListMembers1QueryOptions(officeId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary Remove a member from the office
  */
@@ -553,103 +598,64 @@ export const removeMember = (
   return mutator<void>({ url: `/api/v1/offices/${officeId}/members/${userId}`, method: 'DELETE', signal }, options);
 };
 
-export const getRemoveMemberQueryKey = (officeId: string, userId: string) => {
-  return ['DELETE', 'api', 'v1', 'offices', officeId, 'members', userId] as const;
-};
+export const getRemoveMemberMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeMember>>,
+    TError,
+    { officeId: string; userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeMember>>,
+  TError,
+  { officeId: string; userId: string },
+  TContext
+> => {
+  const mutationKey = ['removeMember'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getRemoveMemberQueryOptions = <TData = Awaited<ReturnType<typeof removeMember>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof removeMember>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeMember>>, { officeId: string; userId: string }> = (
+    props,
+  ) => {
+    const { officeId, userId } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getRemoveMemberQueryKey(officeId, userId);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof removeMember>>> = ({ signal }) =>
-    removeMember(officeId, userId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: officeId !== null && officeId !== undefined && userId !== null && userId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof removeMember>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return removeMember(officeId, userId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type RemoveMemberQueryResult = NonNullable<Awaited<ReturnType<typeof removeMember>>>;
-export type RemoveMemberQueryError = unknown;
+export type RemoveMemberMutationResult = NonNullable<Awaited<ReturnType<typeof removeMember>>>;
 
-export function useRemoveMember<TData = Awaited<ReturnType<typeof removeMember>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof removeMember>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof removeMember>>,
-          TError,
-          Awaited<ReturnType<typeof removeMember>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRemoveMember<TData = Awaited<ReturnType<typeof removeMember>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof removeMember>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof removeMember>>,
-          TError,
-          Awaited<ReturnType<typeof removeMember>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRemoveMember<TData = Awaited<ReturnType<typeof removeMember>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof removeMember>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type RemoveMemberMutationError = unknown;
+
 /**
  * @summary Remove a member from the office
  */
-
-export function useRemoveMember<TData = Awaited<ReturnType<typeof removeMember>>, TError = unknown>(
-  officeId: string,
-  userId: string,
+export const useRemoveMember = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof removeMember>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof removeMember>>,
+      TError,
+      { officeId: string; userId: string },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getRemoveMemberQueryOptions(officeId, userId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof removeMember>>,
+  TError,
+  { officeId: string; userId: string },
+  TContext
+> => {
+  return useMutation(getRemoveMemberMutationOptions(options), queryClient);
+};
 /**
  * @summary Revoke an office role from a member
  */
@@ -666,114 +672,65 @@ export const revokeRole = (
   );
 };
 
-export const getRevokeRoleQueryKey = (officeId: string, userId: string, roleId: string) => {
-  return ['DELETE', 'api', 'v1', 'offices', officeId, 'members', userId, 'roles', roleId] as const;
-};
+export const getRevokeRoleMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeRole>>,
+    TError,
+    { officeId: string; userId: string; roleId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeRole>>,
+  TError,
+  { officeId: string; userId: string; roleId: string },
+  TContext
+> => {
+  const mutationKey = ['revokeRole'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getRevokeRoleQueryOptions = <TData = Awaited<ReturnType<typeof revokeRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  roleId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeRole>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeRole>>,
+    { officeId: string; userId: string; roleId: string }
+  > = (props) => {
+    const { officeId, userId, roleId } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getRevokeRoleQueryKey(officeId, userId, roleId);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof revokeRole>>> = ({ signal }) =>
-    revokeRole(officeId, userId, roleId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled:
-      officeId !== null &&
-      officeId !== undefined &&
-      userId !== null &&
-      userId !== undefined &&
-      roleId !== null &&
-      roleId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof revokeRole>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return revokeRole(officeId, userId, roleId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type RevokeRoleQueryResult = NonNullable<Awaited<ReturnType<typeof revokeRole>>>;
-export type RevokeRoleQueryError = unknown;
+export type RevokeRoleMutationResult = NonNullable<Awaited<ReturnType<typeof revokeRole>>>;
 
-export function useRevokeRole<TData = Awaited<ReturnType<typeof revokeRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  roleId: string,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeRole>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof revokeRole>>,
-          TError,
-          Awaited<ReturnType<typeof revokeRole>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRevokeRole<TData = Awaited<ReturnType<typeof revokeRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  roleId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeRole>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof revokeRole>>,
-          TError,
-          Awaited<ReturnType<typeof revokeRole>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRevokeRole<TData = Awaited<ReturnType<typeof revokeRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  roleId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeRole>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type RevokeRoleMutationError = unknown;
+
 /**
  * @summary Revoke an office role from a member
  */
-
-export function useRevokeRole<TData = Awaited<ReturnType<typeof revokeRole>>, TError = unknown>(
-  officeId: string,
-  userId: string,
-  roleId: string,
+export const useRevokeRole = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeRole>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof revokeRole>>,
+      TError,
+      { officeId: string; userId: string; roleId: string },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getRevokeRoleQueryOptions(officeId, userId, roleId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof revokeRole>>,
+  TError,
+  { officeId: string; userId: string; roleId: string },
+  TContext
+> => {
+  return useMutation(getRevokeRoleMutationOptions(options), queryClient);
+};
 /**
  * @summary Revoke a pending invitation
  */
@@ -789,99 +746,62 @@ export const revokeInvitation = (
   );
 };
 
-export const getRevokeInvitationQueryKey = (officeId: string, invitationId: string) => {
-  return ['DELETE', 'api', 'v1', 'offices', officeId, 'invitations', invitationId] as const;
-};
+export const getRevokeInvitationMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeInvitation>>,
+    TError,
+    { officeId: string; invitationId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof mutator>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeInvitation>>,
+  TError,
+  { officeId: string; invitationId: string },
+  TContext
+> => {
+  const mutationKey = ['revokeInvitation'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const getRevokeInvitationQueryOptions = <TData = Awaited<ReturnType<typeof revokeInvitation>>, TError = unknown>(
-  officeId: string,
-  invitationId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeInvitation>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeInvitation>>,
+    { officeId: string; invitationId: string }
+  > = (props) => {
+    const { officeId, invitationId } = props ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getRevokeInvitationQueryKey(officeId, invitationId);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof revokeInvitation>>> = ({ signal }) =>
-    revokeInvitation(officeId, invitationId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: officeId !== null && officeId !== undefined && invitationId !== null && invitationId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof revokeInvitation>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return revokeInvitation(officeId, invitationId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type RevokeInvitationQueryResult = NonNullable<Awaited<ReturnType<typeof revokeInvitation>>>;
-export type RevokeInvitationQueryError = unknown;
+export type RevokeInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof revokeInvitation>>>;
 
-export function useRevokeInvitation<TData = Awaited<ReturnType<typeof revokeInvitation>>, TError = unknown>(
-  officeId: string,
-  invitationId: string,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeInvitation>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof revokeInvitation>>,
-          TError,
-          Awaited<ReturnType<typeof revokeInvitation>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRevokeInvitation<TData = Awaited<ReturnType<typeof revokeInvitation>>, TError = unknown>(
-  officeId: string,
-  invitationId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeInvitation>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof revokeInvitation>>,
-          TError,
-          Awaited<ReturnType<typeof revokeInvitation>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useRevokeInvitation<TData = Awaited<ReturnType<typeof revokeInvitation>>, TError = unknown>(
-  officeId: string,
-  invitationId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeInvitation>>, TError, TData>>;
-    request?: SecondParameter<typeof mutator>;
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type RevokeInvitationMutationError = unknown;
+
 /**
  * @summary Revoke a pending invitation
  */
-
-export function useRevokeInvitation<TData = Awaited<ReturnType<typeof revokeInvitation>>, TError = unknown>(
-  officeId: string,
-  invitationId: string,
+export const useRevokeInvitation = <TError = unknown, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeInvitation>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof revokeInvitation>>,
+      TError,
+      { officeId: string; invitationId: string },
+      TContext
+    >;
     request?: SecondParameter<typeof mutator>;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getRevokeInvitationQueryOptions(officeId, invitationId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof revokeInvitation>>,
+  TError,
+  { officeId: string; invitationId: string },
+  TContext
+> => {
+  return useMutation(getRevokeInvitationMutationOptions(options), queryClient);
+};
