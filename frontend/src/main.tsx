@@ -6,9 +6,12 @@ import { RouterProvider } from 'react-router-dom';
 
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { queryClient } from '@/lib/queryClient';
+import { applyTheme, resolveTheme } from '@/lib/theme';
 import { router } from '@/routes/router';
 
 import './index.css';
+
+applyTheme(resolveTheme());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

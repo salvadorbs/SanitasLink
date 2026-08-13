@@ -3,6 +3,11 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/features/auth/useAuth';
 
 interface LoginFormValues {
@@ -46,57 +51,69 @@ export function LoginPage() {
   });
 
   return (
-    <main className="auth-page">
-      <section className="auth-card" aria-labelledby="login-heading">
-        <h1 id="login-heading">Accedi a SanitasLink</h1>
-        <p className="auth-subtitle">Inserisci le credenziali del tuo studio.</p>
-        <form className="auth-form" onSubmit={onSubmit} noValidate>
-          <div className="auth-field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              autoFocus
-              aria-invalid={errors.email ? 'true' : undefined}
-              aria-describedby={errors.email ? 'email-error' : undefined}
-              {...register('email', {
-                required: 'Inserisci la tua email.',
-                pattern: { value: EMAIL_PATTERN, message: 'Inserisci un indirizzo email valido.' },
-              })}
-            />
-            {errors.email && (
-              <p id="email-error" className="auth-field-error" role="alert">
-                {errors.email.message}
+    <main className="relative flex min-h-svh items-center justify-center bg-muted/40 p-6">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <section className="w-full max-w-md">
+        <Card>
+          <CardHeader>
+            <h1 className="text-2xl font-semibold tracking-tight">Accedi a SanitasLink</h1>
+            <CardDescription>Inserisci le credenziali del tuo studio.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+              <div className="grid gap-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  autoFocus
+                  aria-invalid={errors.email ? 'true' : undefined}
+                  aria-describedby={errors.email ? 'email-error' : undefined}
+                  {...register('email', {
+                    required: 'Inserisci la tua email.',
+                    pattern: {
+                      value: EMAIL_PATTERN,
+                      message: 'Inserisci un indirizzo email valido.',
+                    },
+                  })}
+                />
+                {errors.email && (
+                  <p id="email-error" className="text-sm text-destructive" role="alert">
+                    {errors.email.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  aria-invalid={errors.password ? 'true' : undefined}
+                  aria-describedby={errors.password ? 'password-error' : undefined}
+                  {...register('password', { required: 'Inserisci la tua password.' })}
+                />
+                {errors.password && (
+                  <p id="password-error" className="text-sm text-destructive" role="alert">
+                    {errors.password.message}
+                  </p>
+                )}
+              </div>
+
+              <p className="min-h-5 text-sm text-destructive" role="alert" aria-live="polite">
+                {authError}
               </p>
-            )}
-          </div>
 
-          <div className="auth-field">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              aria-invalid={errors.password ? 'true' : undefined}
-              aria-describedby={errors.password ? 'password-error' : undefined}
-              {...register('password', { required: 'Inserisci la tua password.' })}
-            />
-            {errors.password && (
-              <p id="password-error" className="auth-field-error" role="alert">
-                {errors.password.message}
-              </p>
-            )}
-          </div>
-
-          <p className="auth-error" role="alert" aria-live="polite">
-            {authError}
-          </p>
-
-          <button type="submit" className="auth-submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Accesso in corso…' : 'Accedi'}
-          </button>
-        </form>
+              <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? 'Accesso in corso…' : 'Accedi'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </section>
     </main>
   );
