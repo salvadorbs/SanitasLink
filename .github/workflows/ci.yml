@@ -75,8 +75,6 @@ jobs:
           POSTGRES_PASSWORD: db_owner
         ports:
           - 5432:5432
-        volumes:
-          - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql:ro
         options: >-
           --health-cmd "pg_isready -U db_owner -d sanitaslink_db"
           --health-interval 5s
@@ -107,13 +105,41 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # The service container cannot mount the init script: a file bind mount to a destination
+      # that does not exist in the image becomes a directory, which broke initdb. Replicate
+      # docker/postgres-init.sql over stdin as db_owner before the backend starts (this mirrors
+      # exactly what Testcontainers does with withInitScript in AuthAndOfficeIntegrationTest).
+      - name: Bootstrap database roles
+        run: >-
+          docker run --rm --network host -i -e PGPASSWORD=db_owner
+          postgres:16-alpine psql -h localhost -U db_owner -d sanitaslink_db
+          -v ON_ERROR_STOP=1 < docker/postgres-init.sql
+
+      # `-pl app-module` resolves the sibling SNAPSHOT modules from the local Maven repo, so
+      # install the reactor first (the e2e job does not run the backend job's `clean verify`).
+      - name: Apply Flyway migrations
+        working-directory: backend
+        run: >-
+          ./mvnw -q -DskipTests install &&
+          ./mvnw -q -pl app-module flyway:migrate
+          -Dflyway.url=jdbc:postgresql://localhost:5432/sanitaslink_db
+          -Dflyway.user=db_owner
+          -Dflyway.password=db_owner
+          -Dflyway.locations=filesystem:core-module/src/main/resources/db/migration,filesystem:patient-module/src/main/resources/db/migration,filesystem:appointment-module/src/main/resources/db/migration,filesystem:prescription-module/src/main/resources/db/migration
+
       - name: Seed E2E data
         run: >-
-          docker run --rm --network host
-          -v "$PWD/docker/e2e-seed.sql:/seed.sql:ro"
-          -e PGPASSWORD=db_owner
+          docker run --rm --network host -i -e PGPASSWORD=db_owner
           postgres:16-alpine psql -h localhost -U db_owner -d sanitaslink_db
-          -v ON_ERROR_STOP=1 -f /seed.sql
+          -v ON_ERROR_STOP=1 < docker/e2e-seed.sql
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       - name: Install Playwright browsers
         working-directory: frontend
