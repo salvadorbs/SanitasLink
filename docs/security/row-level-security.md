@@ -25,7 +25,7 @@ transaction using `set_config(..., false)` (equivalent to `SET LOCAL`):
 | `app.current_office_id` | the current office UUID (empty string when absent) |
 | `app.current_user_id` | the current user UUID |
 | `app.is_admin` | `'true'` when the caller holds the global `ADMIN` role |
-| `app.current_token_hash` | the invitation token hash during the acceptance flow |
+| `app.current_token_hash` | the invitation/token hash during the acceptance and refresh flows |
 
 `SET LOCAL` semantics guarantee the context is scoped to the transaction and never leaks across
 pooled connections. The transaction layer applies the context through `TenantContextManager`
@@ -43,7 +43,8 @@ before any tenant-scoped query.
   the acceptance flow).
 - `refresh_tokens` and `password_reset_tokens`: reads are allowed for the owning user, for the
   bearer of the matching token hash and for admins; writes require the owning user's context (or
-  admin).
+  admin). Replay detection therefore first looks the token up under the token-hash context, then
+  switches to the owning user's context to revoke the whole `session_family_id`.
 - `patients`, `appointments`, `prescriptions`: office members can access only their office's
   clinical data; admins see everything.
 - `audit_events`: reads are limited to the owning office (or admin); global events are readable

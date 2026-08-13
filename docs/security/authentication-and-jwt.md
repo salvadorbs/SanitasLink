@@ -48,10 +48,55 @@ signature. The default access token TTL is 15 minutes
 
 ## Refresh tokens
 
-The refresh flow rotates the refresh token: the presented token is revoked, a new one is issued
-and a new access token is returned. Raw refresh tokens are random 256-bit values; only their
-SHA-256 hash is stored. Logging out revokes the refresh token. A password change or password
-reset revokes all of the user's refresh tokens.
+The raw refresh token is a random 256-bit value; **only its SHA-256 hash is stored** and no raw
+refresh token ever appears in JSON responses, logs or persistent client storage. The backend sets
+it exclusively in an `HttpOnly` cookie:
+
+- `sl_refresh`, scoped to `Path=/api/v1/auth`;
+- `Secure` in production, disabled only in the `dev` profile;
+- `SameSite=Strict`, so browsers never send it on cross-site requests;
+- `Max-Age` equal to the refresh TTL (default 7 days).
+
+The frontend reads nothing from the cookie: the browser attaches it automatically
+(`withCredentials`), and the SPA keeps only the in-memory access token.
+
+### Rotation and session families
+
+Each login creates a new **session family** (`refresh_tokens.session_family_id`). Every rotation
+within that session keeps the family id; the rotated token is atomically revoked
+(`UPDATE ... WHERE revoked_at IS NULL` wins the race) and linked to its replacement via
+`replaced_by_token_hash`.
+
+The refresh flow therefore issues **exactly one** replacement refresh token per call.
+
+### Replay detection
+
+Presenting an already-rotated (revoked + replaced) token is treated as **replay**. The whole
+session family is revoked in a dedicated transaction (it must survive the 401 response) and a
+`TOKEN_REUSE` audit event is recorded. Independent sessions created by later logins on other
+devices are **not** affected.
+
+### Revocation scope
+
+- **logout**: revokes the presented token and expires the cookie (`Max-Age=0`);
+- **replay**: revokes the whole session family;
+- **password change / password reset**: revokes *all* of the user's refresh tokens (security
+  version bump also invalidates previously issued access tokens).
+
+## CSRF and CORS for cookie endpoints
+
+Spring CSRF is disabled because the access token travels in the `Authorization` header and the
+cookie endpoints (login, refresh, logout, invitation acceptance) are protected by:
+
+1. `SameSite=Strict` on the cookie;
+2. an explicit `Origin` allowlist enforced by the CORS filter *and* by the controllers
+   (`assertCookieOrigin`), rejecting any disallowed origin with `403` before token rotation;
+3. credentialed CORS allowing only the configured origins and a narrow header allowlist
+   (`Authorization`, `Content-Type`, `Accept`, `X-Correlation-Id`).
+
+Requests without an `Origin` header (API clients, curl) are accepted: there is no cross-site
+context without an Origin, and non-browser clients manage their own credentials. All auth
+responses carry `Cache-Control: no-store`.
 
 ## First access and invitation acceptance
 

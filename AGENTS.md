@@ -42,7 +42,7 @@ Before implementing or modifying anything, **read and follow the relevant guidan
 
 * **`develop`:** default development branch. All feature, fix and chore work is merged here.
 * **`master`:** stable/production branch. Holds tagged releases; receives only release merges. Never commit directly.
-* **CI on pull requests/push (`ci.yml`):** runs on PRs targeting `develop`/`master` and on pushes to `develop`. It executes the full backend build + tests (`./mvnw clean verify`, Testcontainers included) and the frontend lint, typecheck, tests and build.
+* **CI on pull requests/push (`ci.yml`):** runs on PRs targeting `develop`/`master` and on pushes to `develop`. It executes the full backend build + tests (`./mvnw clean verify`, Testcontainers included), the frontend lint, typecheck, tests and build, an Orval idempotency check (`npm run generate:api` must produce no diff) and the Playwright E2E suite (disposable PostgreSQL seeded from `docker/e2e-seed.sql`).
 * **Orval source of truth:** `orval.config.ts` reads from the committed `frontend/src/api/openapi.json` (override with the `OPENAPI_TARGET` env var, e.g. a live backend URL). The client is regenerated locally with `npm run generate:api` whenever backend endpoints or DTOs change.
 * **Dependabot (`dependabot.yml`):** weekly PRs for Maven and npm dependency updates.
 * **Secret scanning (`secret-scan.yml`):** gitleaks (Docker image, no license required) scans the full history on push and pull requests.
