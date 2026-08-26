@@ -54,7 +54,7 @@
     "jsdom": "^30.0.1",
     "lint-staged": "^17.3.0",
     "msw": "^2.15.0",
-    "orval": "^8.24.0",
+    "orval": "^8.26.0",
     "oxlint": "^1.75.0",
     "oxlint-tsgolint": "^7.0.2001",
     "prettier": "^3.9.6",
